@@ -16,6 +16,7 @@ import pandas as pd
 import requests
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError
 
+from pydantic import BaseModel
 from openai import AsyncOpenAI
 from slashgpt.chat_session import ChatSession
 from tabulate import tabulate
@@ -23,7 +24,6 @@ from tabulate import tabulate
 import krt
 
 from bp import BP, ProcessStep
-from models import LLMResponse
 from server_utils import (
     generate_stream,
     get_s3_proc,
@@ -52,13 +52,41 @@ if platform.system() == "Darwin":
     # So that input can handle Kanji & delete
     import readline  # noqa: F401
 
+class _Base(BaseModel):
+    pass
+
+
+class FlowLog(BaseModel):
+    message: Optional[str] = None
+    """Log message"""
+    error: Optional[str] = None
+    """Error message"""
+
+
+class LLMResponse(BaseModel):
+    text: Optional[str] = None
+    """Text outputted by the LLM"""
+    data: Optional[pd.DataFrame] = None
+    """Data outputted by the LLM"""
+
+    class Config:
+        arbitrary_types_allowed = True
+
 
 async def collect_messages(generator: AsyncGenerator):
     """Collect all messages from an async generator into a list."""
     collected_messages = []
     async for message in generator:
-        collected_messages.append(message)
-    return collected_messages
+        if type(message) is not FlowLog:
+            collected_messages.append(message)
+
+    response_str = ""
+    for msg in collected_messages:
+        if type(msg) is tuple:
+            response_str += msg[0]
+        if type(msg) is str:
+            response_str += msg
+    return response_str
 
 
 async def vega_chart(
@@ -174,14 +202,18 @@ class BPAgent:
                     async for message in self.__run_llm_step(
                         step_input, proc_step, uid
                     ):
-                        collected_messages.append(message)
+                        if type(message) is not FlowLog:
+                            collected_messages.append(message)
                         yield message
                 except Exception as e:
                     raise e
                 llm_step_output = "".join(collected_messages)
                 formatted_output = self.__parse_llm_response(llm_step_output, "```")
-                if formatted_output:
-                    step_output.text = formatted_output
+                if type(formatted_output) is FlowLog:
+                    if formatted_output.text:
+                        step_output.text = formatted_output
+                    elif formatted_output.error:
+                        yield formatted_output
                 else:
                     step_output.text = llm_step_output
 
@@ -191,52 +223,57 @@ class BPAgent:
                     async for message in self.__run_llm_step(
                         step_input, proc_step, uid
                     ):
-                        llm_step_messages.append(message)
-                        img_url = "".join(llm_step_messages)
-
-                        # Generate a unique filename based off of the image contents
-                        data_s3_path = f"d/{uid}/data"
-                        data_filenames = get_s3_ls(BUCKET_NAME, data_s3_path)
-
-                        assistant_proc = get_s3_proc("Assistant", "SYSTEM")
-                        filename_gen_manifest = assistant_proc.manifests.get(
-                            "imageFilename"
-                        )
-                        filename_gen_manifest["prompt"] = (
-                            filename_gen_manifest["prompt"] + f"\n\n{data_filenames}"
-                        )
-
-                        collected_messages = []
-                        try:
-                            async for message in self.process_llm(
-                                img_url,
-                                None,
-                                uid,
-                                filename_gen_manifest,
-                                session_id=session_id,
-                            ):
-                                collected_messages.append(message)
-                            img_filename = "".join(collected_messages)
-                        except Exception as e:
-                            raise e
-
-                        response = requests.get(img_url)
-                        if response.status_code == 200:
-                            img_s3_url = upload_to_s3(
-                                img_filename, response.content, uid
-                            )
-                            step_output.text = f"![]({img_s3_url})"
-                            step_output.data = base64.b64encode(
-                                response.content
-                            ).decode("utf-8")
-                            logger.info(
-                                f"[BPAgent][run_proc] Uploaded {img_filename} to S3..."
-                            )
+                        if type(message) is FlowLog:
+                            yield message
                         else:
-                            logger.error(
-                                f"[BPAgent][run_proc] Failed to generate image..."
-                            )
-                            raise IOError("Failed to generate image")
+                            llm_step_messages.append(message)
+
+                    img_url = "".join(llm_step_messages)
+
+                    # Generate a unique filename based off of the image contents
+                    data_s3_path = f"d/{uid}/data"
+                    data_filenames = get_s3_ls(BUCKET_NAME, data_s3_path)
+
+                    assistant_proc = get_s3_proc("Assistant", "SYSTEM")
+                    filename_gen_manifest = assistant_proc.manifests.get(
+                        "imageFilename"
+                    )
+                    filename_gen_manifest["prompt"] = (
+                        filename_gen_manifest["prompt"] + f"\n\n{data_filenames}"
+                    )
+
+                    collected_messages = []
+                    try:
+                        async for message in self.process_llm(
+                            img_url,
+                            None,
+                            uid,
+                            filename_gen_manifest,
+                            session_id=session_id,
+                        ):
+                            if type(message) is not FlowLog:
+                                collected_messages.append(message)
+                        img_filename = "".join(collected_messages)
+                    except Exception as e:
+                        raise e
+
+                    response = requests.get(img_url)
+                    if response.status_code == 200:
+                        img_s3_url = upload_to_s3(
+                            img_filename, response.content, uid
+                        )
+                        step_output.text = f"![]({img_s3_url})"
+                        step_output.data = base64.b64encode(
+                            response.content
+                        ).decode("utf-8")
+                        yield FlowLog(
+                            message=f"[BPAgent][run_proc] Uploaded {img_filename} to S3..."
+                        )
+                    else:
+                        yield FlowLog(
+                            error=f"[BPAgent][run_proc] Failed to generate image..."
+                        )
+                        raise IOError("Failed to generate image")
                 except Exception as e:
                     raise e
             else:
@@ -244,7 +281,8 @@ class BPAgent:
                     async for message in self.__run_llm_step(
                         step_input, proc_step, uid
                     ):
-                        llm_step_messages.append(message)
+                        if type(message) is not FlowLog:
+                            llm_step_messages.append(message)
                         yield message
                     yield "\n"
                 except Exception as e:
@@ -334,8 +372,9 @@ class BPAgent:
             rag_messages = []
             try:
                 async for message in self.__run_rag_step(step_input, proc_step, uid):
+                    if type(message) is not FlowLog:
+                        rag_messages.append(message)
                     yield message
-                    rag_messages.append(message)
             except Exception as e:
                 raise e
 
@@ -440,8 +479,8 @@ class BPAgent:
             )
             if not is_base64_image(question):
                 session.append_user_question(session.manifest.format_question(question))
-                logger.info(
-                    f"[Assistant][call_llm] Received question: {session.manifest.format_question(question)}"
+                yield FlowLog(
+                    message=f"[Assistant][call_llm] Received question: {session.manifest.format_question(question)}"
                 )
 
             # Call the LLM
@@ -478,22 +517,22 @@ class BPAgent:
                         async for message in session.call_loop(
                             self._process_event, None
                         ):
-                            collected_messages.append(message)
+                            if type(message) is not FlowLog:
+                                collected_messages.append(message)
                             yield message  # Stream output to UI
                         res = "".join(collected_messages)
                 except Exception as e:
-                    logger.error(f"[Assistant][inference] Got error {e}")
+                    yield FlowLog(error=f"[Assistant][inference] Got error {e}")
                 if not res:
                     retry_attempts += 1
 
-            logger.info(f"[Assistant][inference] Got response from LLM: {res}")
+            yield FlowLog(message=f"[Assistant][inference] Got response from LLM: {res}")
 
         except (NoCredentialsError, PartialCredentialsError) as e:
-            logger.error(f"[Assistant][call_llm] AWS credential error")
+            yield FlowLog(error=f"[Assistant][call_llm] AWS credential error")
         except Exception as e:
-            logger.error(
-                f"[Assistant][call_llm] Uncaught error while making inference: {e}",
-                extra={"session_id": session_id},
+            yield FlowLog(
+                error=f"[Assistant][call_llm] Uncaught error while making inference: {e}"
             )
 
     async def inference(
@@ -504,7 +543,7 @@ class BPAgent:
     ) -> AsyncGenerator:
         """Manages LLM inference (more documentation forthcoming)."""
 
-        logger.info(f"[Assistant][inference] Received request from user: {uid}")
+        yield FlowLog(message=f"[Assistant][inference] Received request from user: {uid}")
 
         user_proc = None
         try:
@@ -565,11 +604,14 @@ class BPAgent:
                             dummy_manifest,
                             session_id=session_id,
                         ):
-                            collected_messages.append(message)
-                            if collected_messages[0].startswith("`"):
-                                stream_to_ui = False
-                            if stream_to_ui:
+                            if type(message) is FlowLog:
                                 yield message
+                            else:
+                                collected_messages.append(message)
+                                if collected_messages[0].startswith("`"):
+                                    stream_to_ui = False
+                                if stream_to_ui:
+                                    yield message
                         if stream_to_ui:
                             yield "\n\n"
                     except Exception as e:
@@ -599,7 +641,9 @@ class BPAgent:
 
             if user_proc is not None:
                 # Run the process and return those results
-                logger.info(f"[Assistant][inference] Running process {user_proc.name}")
+                yield FlowLog(
+                    message=f"[Assistant][inference] Running process {user_proc.name}"
+                )
                 try:
                     # message: Tuple[Union[str, LLMResponse], bool]
                     async for message in self.run_proc(
@@ -621,9 +665,7 @@ class BPAgent:
                     raise e
 
         except (NoCredentialsError, PartialCredentialsError) as e:
-            logger.exception(
-                f"[SlashGPTServer][refresh_from_s3] AWS credential error: {e}"
-            )
+            yield FlowLog(error=f"[SlashGPTServer][refresh_from_s3] AWS credential error: {e}")
             raise e
         except Exception as e:
             raise e
@@ -657,8 +699,8 @@ class BPAgent:
 
             # If we errored on the previous step, break the loop
             if type(proc_step) is ProcessStep:
-                logger.info(
-                    f"[BPAgent][run_proc] Running step: {proc_step.description}"
+                yield FlowLog(
+                    message=f"[BPAgent][run_proc] Running step: {proc_step.description}"
                 )
 
                 ##
@@ -750,11 +792,11 @@ class BPAgent:
                 if results:
                     llm_responses = []
                     for model_output in results:
-                        llm_responses.append(model_output[-1])
+                        llm_responses.append(model_output)
 
                     aggregate_str = ""
                     for resp in llm_responses:
-                        aggregate_str += f"{resp.text}\n\n"
+                        aggregate_str += f"{resp}\n\n"
                     step_output = LLMResponse(text=aggregate_str, data=None)
 
             else:
@@ -790,8 +832,8 @@ class BPAgent:
                                 upload_to_s3(s.data_output_name, step_output.data, uid)
                             else:
                                 upload_to_s3(s.data_output_name, step_output.text, uid)
-                            logger.info(
-                                f"[BPAgent][run_proc] Uploaded {s.data_output_name} to S3..."
+                            yield FlowLog(
+                                message=f"[BPAgent][run_proc] Uploaded {s.data_output_name} to S3..."
                             )
                         except Exception as e:
                             raise IOError(
@@ -892,7 +934,8 @@ class BPAgent:
                     session_id=session_id,
                     use_alias=False,
                 ):
-                    collected_messages.append(message)
+                    if type(message) is not FlowLog:
+                        collected_messages.append(message)
                     yield message
                 llm_resp = "".join(collected_messages)
                 retry_no += 1
@@ -913,8 +956,8 @@ class BPAgent:
 
         def log_progress():
             elapsed_seconds = time.time() - start_seconds
-            logger.info(
-                f"[RAG] response_count: {response_count:4d}, elapsed_seconds: {elapsed_seconds:7.3f}",
+            yield FlowLog(
+                message=f"[RAG] response_count: {response_count:4d}, elapsed_seconds: {elapsed_seconds:7.3f}",
             )
 
         async def on_response(response: RagResponse, response_str: str):
@@ -923,9 +966,10 @@ class BPAgent:
             response_count += 1
             log_progress()  # TODO(lucas): Probably don't need to log every packet, don't forget about this
 
-        async def on_error(error_code: int, error_str: str) -> bool:
-            logger.error("[RAG] Error code: {error_code}, Error string: {error_str}")
-            return False
+        async def on_error(error_code: int, error_str: str) -> FlowLog:
+            return FlowLog(
+                error="[RAG] Error code: {error_code}, Error string: {error_str}"
+            )
 
         # Call the RAG service
         collected_responses = []
@@ -967,7 +1011,6 @@ class BPAgent:
         elif comma_ind > import_ind >= 0:
             start_ind = import_ind
         else:
-            logger.warning("")
             start_ind = 0  # Probably will fail
         if start_ind != -1:
             code = code_output[start_ind:]
@@ -996,7 +1039,7 @@ class BPAgent:
 
             except Exception as e:
                 # Try to fix errors
-                logger.warning(f"Got error while running LLM code {code}: {e}")
+                yield FlowLog(error=f"Got error while running LLM code {code}: {e}")
                 if retry_no < step.parent.server_config.max_retries:
                     yield "Encountered error executing Python code. Attempting to debug...\n"
                     manifest = copy.deepcopy(step.parent.manifests.get("debug"))
@@ -1011,9 +1054,9 @@ class BPAgent:
                         session_id=session_id,
                         use_alias=False,
                     ):
+                        if type(message) is not FlowLog:
+                            collected_messages.append(message)
                         yield message
-                        collected_messages.append(message)
-
                     yield "\n\n"
                     llm_resp = "".join(collected_messages)
                     formatted_code = self.__parse_llm_response(llm_resp, pattern="```")
@@ -1047,7 +1090,8 @@ class BPAgent:
                 session_id=session_id,
                 use_alias=False,
             ):
-                collected_messages.append(message)
+                if type(message) is not FlowLog:
+                    collected_messages.append(message)
                 yield message
             yield "\n\n"
             llm_resp = "".join(collected_messages)
@@ -1113,13 +1157,11 @@ class BPAgent:
             else:
                 exec(module_code, namespace)
         except krt.ExecutionError as e:
-            logger.exception("Remote code execution failed", exc_info=e)
-            raise e
+            return FlowLog(error="Remote code execution failed", exc_info=e)
         except (NoCredentialsError, PartialCredentialsError, Exception) as e:
-            logger.exception(
+            return FlowLog(error=
                 f"[SlashGPTServer][__run_python_step] AWS credentials error: {e}"
             )
-            raise e
         # Construct the function scope
         if func_name in namespace and callable(namespace[func_name]):
             func = namespace[func_name]
@@ -1201,12 +1243,12 @@ class BPAgent:
         return None
 
     @classmethod
-    def __parse_llm_response(cls, res, pattern) -> Optional[str]:
+    def __parse_llm_response(cls, res, pattern) -> Union[str, FlowLog]:
         # Filter the LLM output based off of a specified regex pattern
         match = None
         if pattern:
-            logger.info(
-                f"[Assistant][call_llm] Extracting data from LLM response with pattern {pattern}"
+            yield FlowLog(
+                message=f"[Assistant][call_llm] Extracting data from LLM response with pattern {pattern}"
             )
             re_pattern = r"{}(.*?){}".format(re.escape(pattern), re.escape(pattern))
             match = re.search(re_pattern, res, re.DOTALL)
@@ -1225,12 +1267,11 @@ class BPAgent:
                     formatted_res = [i.strip() for i in formatted_res]
                 res = formatted_res
             except Exception as e:
-                logger.warning(
+                return FlowLog(error=
                     f"[Assistant][call_llm] Detected malformed list in LLM response. Likely LLM hallucination."
                 )
-                return None
         else:
-            logger.warning(
+            return FlowLog(message=
                 f"[Assistant][call_llm] Regex pattern {pattern} match not detected. Returning unfiltered output."
             )
 
