@@ -392,7 +392,8 @@ class BPAgent:
                     yield message
             except Exception as e:
                 raise e
-
+            rag_response = "".join(rag_messages)
+            step_output.text = rag_response
         else:
             raise NotImplementedError(f"Unrecognized step type {proc_step.type}")
 
@@ -807,7 +808,7 @@ class BPAgent:
                     async for chunk in generate_stream(
                         f"{ae}. Please check if the file exists."
                     ):
-                        yield chunk, True  # FIXME(lucas): Allows canvas output management for parallel steps
+                        yield chunk, True  # FIXME(lucas): Allow canvas output management for parallel steps
 
                 # Each item in results is a list of messages from one async generator
                 if results:
