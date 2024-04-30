@@ -1,0 +1,47 @@
+{
+    "thread_id": "67c68961-f091-4db7-a614-4014743f9957",
+    "history": [],
+    "new_record": {
+        "request_id": "d3cd2362-747e-421f-a2fc-343e1a978c10",
+        "config": {
+            "embeddings_config": {
+                "db_host": "postgresql-ebp.cfwmuvh4blso.us-west-2.rds.amazonaws.com",
+                "db_port": 5432,
+                "db_name": "crag_agent_db",
+                "db_username": "postgres",
+                "db_password": "$EMBEDDINGS_DB_PASSWORD",
+                "model": "text-embedding-ada-002",
+                "api_key": "$OPENAI_API_KEY"
+            },
+            "anns_input_llm_config": {
+                "model": "gpt-4-0125-preview",
+                "api_key": "$OPENAI_API_KEY"
+            },
+            "ann_evaluations_llm_config": {
+                "model": "gpt-4-0125-preview",
+                "api_key": "$OPENAI_API_KEY"
+            },
+            "ann_relevancies_llm_config": {
+                "model": "gpt-4-0125-preview",
+                "api_key": "$OPENAI_API_KEY"
+            },
+            "anns_summary_llm_config": {
+                "model": "gpt-4-0125-preview",
+                "api_key": "$OPENAI_API_KEY"
+            },
+            "prev_record_summary_llm_config": {
+                "model": "gpt-4-0125-preview",
+                "api_key": "$OPENAI_API_KEY"
+            },
+            "full_history_summary_llm_config": {
+                "model": "gpt-4-0125-preview",
+                "api_key": "$OPENAI_API_KEY"
+            },
+            "rag_output_llm_config": {
+                "model": "gpt-4-0125-preview",
+                "api_key": "$OPENAI_API_KEY"
+            }
+        },
+        "user_input": "What is the maximum gallons per flush allowed for a toilet in Seattle?"
+    }
+}
