@@ -52,6 +52,7 @@ if platform.system() == "Darwin":
     # So that input can handle Kanji & delete
     import readline  # noqa: F401
 
+
 class _Base(BaseModel):
     pass
 
@@ -185,7 +186,6 @@ class BPAgent:
 
         # Run LLM-based step
         if proc_step.type == "llm":
-            llm_step_output = None
             llm_step_messages = []
 
             # Manifest doesn't exist; something is wrong
@@ -208,14 +208,19 @@ class BPAgent:
                 except Exception as e:
                     raise e
                 llm_step_output = "".join(collected_messages)
-                formatted_output = self.__parse_llm_response(llm_step_output, "```")
+                regex_pattern = "```"
+                yield FlowLog(
+                    message=f"[Assistant][call_llm] Extracting data from LLM response with pattern {regex_pattern}"
+                )
+                formatted_output = self.__parse_llm_response(
+                    llm_step_output, regex_pattern
+                )
                 if type(formatted_output) is FlowLog:
-                    if formatted_output.text:
-                        step_output.text = formatted_output
-                    elif formatted_output.error:
-                        yield formatted_output
-                else:
-                    step_output.text = llm_step_output
+                    if formatted_output.message:
+                        step_output.text = llm_step_output
+                    yield formatted_output
+                elif type(formatted_output) is str or type(formatted_output) is list:
+                    step_output.text = formatted_output
 
             # Determine if this is vision or text model
             elif proc_step.manifest.get("model").get("model_name") in image_models:
@@ -259,13 +264,11 @@ class BPAgent:
 
                     response = requests.get(img_url)
                     if response.status_code == 200:
-                        img_s3_url = upload_to_s3(
-                            img_filename, response.content, uid
-                        )
+                        img_s3_url = upload_to_s3(img_filename, response.content, uid)
                         step_output.text = f"![]({img_s3_url})"
-                        step_output.data = base64.b64encode(
-                            response.content
-                        ).decode("utf-8")
+                        step_output.data = base64.b64encode(response.content).decode(
+                            "utf-8"
+                        )
                         yield FlowLog(
                             message=f"[BPAgent][run_proc] Uploaded {img_filename} to S3..."
                         )
@@ -289,20 +292,32 @@ class BPAgent:
                     raise e
                 llm_step_output = "".join(llm_step_messages)
                 # Look for special outputs enclosed within backticks
-                formatted_output = self.__parse_llm_response(llm_step_output, "```")
-                if formatted_output:
+                regex_pattern = "```"
+                yield FlowLog(
+                    message=f"[Assistant][call_llm] Extracting data from LLM response with pattern {regex_pattern}"
+                )
+                formatted_output = self.__parse_llm_response(
+                    llm_step_output, regex_pattern
+                )
+                if type(formatted_output) is FlowLog:
+                    if formatted_output.message:
+                        step_output.text = llm_step_output
+                    yield formatted_output
+                elif type(formatted_output) is str or type(formatted_output) is list:
                     step_output.text = formatted_output
-                else:
-                    step_output.text = llm_step_output
 
         # Run Python code and may return text or data
         elif proc_step.type == "python":
+            python_step_resp = None
             try:
                 python_step_resp = await self.__run_python_step(
                     step_input, proc_step, uid
                 )
-            except Exception as e:
-                raise e
+            except ValueError as e:
+                err_str = e.__str__()
+                step_output.text = f"Received the following error during code execution. Please adjust accordingly and try again.\n\n{err_str}"
+                yield step_output.text
+                yield "\n"
             if type(python_step_resp) is str:
                 step_output.text = python_step_resp
                 yield python_step_resp
@@ -526,7 +541,9 @@ class BPAgent:
                 if not res:
                     retry_attempts += 1
 
-            yield FlowLog(message=f"[Assistant][inference] Got response from LLM: {res}")
+            yield FlowLog(
+                message=f"[Assistant][inference] Got response from LLM: {res}"
+            )
 
         except (NoCredentialsError, PartialCredentialsError) as e:
             yield FlowLog(error=f"[Assistant][call_llm] AWS credential error")
@@ -543,7 +560,9 @@ class BPAgent:
     ) -> AsyncGenerator:
         """Manages LLM inference (more documentation forthcoming)."""
 
-        yield FlowLog(message=f"[Assistant][inference] Received request from user: {uid}")
+        yield FlowLog(
+            message=f"[Assistant][inference] Received request from user: {uid}"
+        )
 
         user_proc = None
         try:
@@ -665,7 +684,9 @@ class BPAgent:
                     raise e
 
         except (NoCredentialsError, PartialCredentialsError) as e:
-            yield FlowLog(error=f"[SlashGPTServer][refresh_from_s3] AWS credential error: {e}")
+            yield FlowLog(
+                error=f"[SlashGPTServer][refresh_from_s3] AWS credential error: {e}"
+            )
             raise e
         except Exception as e:
             raise e
@@ -745,7 +766,7 @@ class BPAgent:
                         yield chunk, True
                 except NotImplementedError:
                     async for chunk in generate_stream(
-                        "Malformed expert step {proc_step.name}. Please check your expert configuration and try again."
+                        f"\nMalformed expert step {proc_step.name}. Please check your expert configuration and try again."
                     ):
                         yield chunk, True
                 except Exception as e:
@@ -1059,7 +1080,15 @@ class BPAgent:
                         yield message
                     yield "\n\n"
                     llm_resp = "".join(collected_messages)
-                    formatted_code = self.__parse_llm_response(llm_resp, pattern="```")
+                    regex_pattern = "```"
+                    yield FlowLog(
+                        message=f"[Assistant][call_llm] Extracting data from LLM response with pattern {regex_pattern}"
+                    )
+                    formatted_code = self.__parse_llm_response(
+                        llm_resp, pattern=regex_pattern
+                    )
+                    if type(formatted_code) is FlowLog:
+                        yield formatted_code
 
                     # Attempt to run the debugged code
                     async for message in self.__run_llm_python_code(
@@ -1098,9 +1127,20 @@ class BPAgent:
             retry_no += 1
 
         # Execute the code
-        formatted_code = self.__parse_llm_response(llm_resp, "```")
+        regex_pattern = "```"
+        yield FlowLog(
+            message=f"[Assistant][call_llm] Extracting data from LLM response with pattern {regex_pattern}"
+        )
+        formatted_code = self.__parse_llm_response(llm_resp, regex_pattern)
+        if type(formatted_code) is FlowLog:
+            yield formatted_code
         async for message in self.__run_llm_python_code(
-            formatted_code, step, step_input, 0, session_id
+            formatted_code,
+            step,
+            step_input,
+            uid,
+            0,
+            session_id,
         ):
             yield message
 
@@ -1159,8 +1199,8 @@ class BPAgent:
         except krt.ExecutionError as e:
             return FlowLog(error="Remote code execution failed", exc_info=e)
         except (NoCredentialsError, PartialCredentialsError, Exception) as e:
-            return FlowLog(error=
-                f"[SlashGPTServer][__run_python_step] AWS credentials error: {e}"
+            return FlowLog(
+                error=f"[SlashGPTServer][__run_python_step] AWS credentials error: {e}"
             )
         # Construct the function scope
         if func_name in namespace and callable(namespace[func_name]):
@@ -1247,11 +1287,12 @@ class BPAgent:
         # Filter the LLM output based off of a specified regex pattern
         match = None
         if pattern:
-            yield FlowLog(
-                message=f"[Assistant][call_llm] Extracting data from LLM response with pattern {pattern}"
-            )
             re_pattern = r"{}(.*?){}".format(re.escape(pattern), re.escape(pattern))
             match = re.search(re_pattern, res, re.DOTALL)
+        else:
+            return FlowLog(
+                message="[Assistant][call_llm] No regex pattern specified. No pattern matching performed."
+            )
 
         # Try to extract a list if the pattern is found
         if match:
@@ -1265,14 +1306,12 @@ class BPAgent:
                 ):
                     formatted_res = formatted_res.strip("[]").split(",")
                     formatted_res = [i.strip() for i in formatted_res]
-                res = formatted_res
+                return formatted_res
             except Exception as e:
-                return FlowLog(error=
-                    f"[Assistant][call_llm] Detected malformed list in LLM response. Likely LLM hallucination."
+                return FlowLog(
+                    error=f"[Assistant][call_llm] Detected malformed list in LLM response. Likely LLM hallucination."
                 )
         else:
-            return FlowLog(message=
-                f"[Assistant][call_llm] Regex pattern {pattern} match not detected. Returning unfiltered output."
+            return FlowLog(
+                message=f"[Assistant][call_llm] Regex pattern {pattern} match not detected. Returning unfiltered output."
             )
-
-        return res
