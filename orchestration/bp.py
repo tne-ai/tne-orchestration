@@ -6,7 +6,7 @@ import pandas as pd
 from io import StringIO
 from typing import Dict, List, Optional, Union
 
-from db_utils import PostgresConnector, RajkumarFormatter
+from orchestration.db_utils import PostgresConnector, RajkumarFormatter
 
 # Uncomment below to use local SlashGPT
 # import sys
@@ -85,7 +85,7 @@ class BP:
             self.data = process["data"]
             self.steps_list = process["steps"]
             self.descriptions = process["description"]
-            self.manifests_path = process["manifests_path"]
+            self.manifests_path="."
         except KeyError as k:
             raise MalformedDataError(f"Process had parsing error: {k}")
 

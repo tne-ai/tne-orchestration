@@ -8,7 +8,7 @@ import asyncio
 
 import base64
 import binascii
-from bp import BP
+from orchestration.bp import BP
 from io import StringIO
 
 
@@ -17,7 +17,7 @@ from collections import deque
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError
 
 # RAG imports
-from v2.api.api import (
+from orchestration.v2.api.api import (
     EmbeddingsConfig,
     LlmConfig,
     RagConfig,
@@ -632,7 +632,6 @@ def parse_graph(file_name, graph):
         },
         "output_type": "overwrite",
         "data_output_name": "",
-        "manifests_path": "./manifests",
         "steps": {},
     }
 
