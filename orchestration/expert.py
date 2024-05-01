@@ -978,7 +978,7 @@ class BPAgent:
 
         def log_progress():
             elapsed_seconds = time.time() - start_seconds
-            yield FlowLog(
+            return FlowLog(
                 message=f"[RAG] response_count: {response_count:4d}, elapsed_seconds: {elapsed_seconds:7.3f}",
             )
 
@@ -986,10 +986,10 @@ class BPAgent:
             nonlocal response_count
             nonlocal start_seconds
             response_count += 1
-            log_progress()  # TODO(lucas): Probably don't need to log every packet, don't forget about this
+            return log_progress()  # TODO(lucas): Probably don't need to log every packet, don't forget about this
 
-        async def on_error(error_code: int, error_str: str) -> FlowLog:
-            return FlowLog(
+        async def on_error(error_code: int, error_str: str):
+            yield FlowLog(
                 error="[RAG] Error code: {error_code}, Error string: {error_str}"
             )
 
@@ -999,6 +999,8 @@ class BPAgent:
         yield "```SET_IS_SPINNING```"
         yield "\n"
         try:
+            resp_count = 0
+            rag_start_time = time.time()
             async for rag_response in async_iterate_streaming_request_generator(
                 settings.rag_endpoint, rag_request, on_response, on_error
             ):
@@ -1010,6 +1012,14 @@ class BPAgent:
                         yield "\n"
 
                     yield rag_response.patch_record.rag_output.text
+
+                # Temporary logging
+                resp_count += 1
+                if resp_count % 25 == 0:
+                    elapsed_time = time.time() - rag_start_time
+                    yield FlowLog(
+                        message=f"[RAG] response_count: {resp_count:4d}, elapsed_seconds: {elapsed_time:7.3f}",
+                    )
         except Exception as e:
             raise e
 
