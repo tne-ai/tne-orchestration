@@ -29,8 +29,8 @@ from typing import Union, Dict, Tuple
 
 # Inference server literals
 BUCKET_NAME = "bp-authoring-files"
-EXPERTS_DIR = "proc"
-MODELS_DIR = "manifests"
+PROC_DIR = "proc"
+AGENT_DIR = "manifests"
 CODE_DIR = "modules"
 DATA_DIR = "data"
 OPERATOR_NODES = ["llm", "proc", "python", "rag"]
@@ -255,7 +255,7 @@ def get_s3_proc(proc_name: str, uid: str):
     """Fetches a process file from S3"""
     try:
         s3 = boto3.client("s3")
-        proc_s3_path = f"d/{uid}/{EXPERTS_DIR}"
+        proc_s3_path = f"d/{uid}/{PROC_DIR}"
         bucket_contents = s3.list_objects(Bucket=BUCKET_NAME, Prefix=proc_s3_path)[
             "Contents"
         ]
@@ -445,7 +445,7 @@ def __construct_step_dict(
 ) -> Union[Dict, Tuple]:
     """Construct a graph node object given I/O information and node data"""
 
-    # Expert node
+    # Process node
     if node.get("type") == "proc":
         step_dict = {
             "name": node.get("data").get("proc").split(".")[0],
@@ -461,7 +461,7 @@ def __construct_step_dict(
 
         return step_dict
 
-    # Model node
+    # Agent node
     elif node.get("type") == "llm":
         step_dict = {
             "name": node.get("data").get("slashgptManifest"),

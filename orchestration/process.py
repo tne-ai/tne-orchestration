@@ -367,7 +367,7 @@ class BPAgent:
             try:
                 sub_proc = get_s3_proc(proc_step.name, uid)
             except Exception as e:
-                raise IOError(f"Could not find sub-expert: {proc_step.name}")
+                raise IOError(f"Could not find sub-process: {proc_step.name}")
             try:
                 async for message in self.run_proc(
                     step_input,
@@ -583,10 +583,10 @@ class BPAgent:
                             f"Error pulling process [{proc_name}] from S3. Please check your AWS credentials."
                         ):
                             yield chunk
-                    # Could not find a matching expert
+                    # Could not find a matching process
                     if not user_proc and not aws_token_error:
                         async for chunk in generate_stream(
-                            f"Could not find an expert called {proc_name}"
+                            f"Could not find a process called {proc_name}"
                         ):
                             yield chunk
 
@@ -646,10 +646,10 @@ class BPAgent:
                         proc_name = match.group(1).strip()
                     if proc_name:
                         user_proc = get_s3_proc(proc_name, uid)
-                        # Could not find a matching expert
+                        # Could not find a matching process
                         if not user_proc:
                             raise ValueError(
-                                f"Could not find an expert called {proc_name}"
+                                f"Could not find an process called {proc_name}"
                             )
             except (IndexError, ValueError):
                 async for chunk in generate_stream(
@@ -767,7 +767,7 @@ class BPAgent:
                         yield chunk, True
                 except NotImplementedError:
                     async for chunk in generate_stream(
-                        f"\nMalformed expert step {proc_step.name}. Please check your expert configuration and try again."
+                        f"\nMalformed process step {proc_step.name}. Please check your expert configuration and try again."
                     ):
                         yield chunk, True
                 except Exception as e:
