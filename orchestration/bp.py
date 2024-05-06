@@ -247,7 +247,7 @@ class ProcessStep:
         # Function
         self.manifest = None
         if self.type == "llm" or self.type == "llm-python":
-            self.manifest = self.parent.manifests.get(self.name)
+            self.manifest = self.parent.manifests.get(self.name.split(".")[0])
 
         self.module = None
         if self.type == "python":
