@@ -167,7 +167,7 @@ class BPAgent:
             manifest_model = proc_step.manifest.get("model")
             if manifest_model:
                 if "tne" in manifest_model.get("model_name"):
-                    proc_step.manifest["model"]["model_name"] = "llama2-70b-4096"
+                    proc_step.manifest["model"]["model_name"] = "llama3-70b-8192"
 
         # Handle special case where a LLM step picks from a list of manifests to run
         if proc_step.name == "dispatched":
