@@ -85,7 +85,7 @@ class BP:
             self.data = process["data"]
             self.steps_list = process["steps"]
             self.descriptions = process["description"]
-            self.manifests_path="."
+            self.manifests_path = "."
         except KeyError as k:
             raise MalformedDataError(f"Process had parsing error: {k}")
 
