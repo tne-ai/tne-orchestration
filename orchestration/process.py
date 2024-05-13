@@ -986,7 +986,9 @@ class BPAgent:
             nonlocal response_count
             nonlocal start_seconds
             response_count += 1
-            return log_progress()  # TODO(lucas): Probably don't need to log every packet, don't forget about this
+            return (
+                log_progress()
+            )  # TODO(lucas): Probably don't need to log every packet, don't forget about this
 
         async def on_error(error_code: int, error_str: str):
             yield FlowLog(
@@ -996,16 +998,78 @@ class BPAgent:
         # Call the RAG service
         collected_responses = []
         is_spinning = True
+        emitted_evaluations = False
+        emitted_debug_header = False
         yield "```SET_IS_SPINNING```"
         yield "\n"
         try:
             resp_count = 0
             rag_start_time = time.time()
+            evaluation_texts = {}
             async for rag_response in async_iterate_streaming_request_generator(
                 settings.rag_endpoint, rag_request, on_response, on_error
             ):
-                collected_responses.append(rag_response)
-                if rag_response.patch_record.rag_output:
+                patch_record = rag_response.patch_record
+                collected_responses.append(patch_record)
+                if proc_step.show_debug is True:
+                    if not emitted_debug_header:
+                        yield "**RAG METRICS**\n\n"
+                        emitted_debug_header = True
+                    if patch_record.anns:
+                        anns = patch_record.anns
+                        if is_spinning:
+                            is_spinning = False
+                            yield "```STOP_SPINNING```"
+                            yield "\n"
+                        for embedding_id in anns.keys():
+                            text = anns[embedding_id].text
+                            similarity = anns[embedding_id].similarity
+                            evaluation = anns[embedding_id].evaluation
+                            if text:
+                                yield f"EMBEDDING ID: {embedding_id}\n\n"
+                                yield f"EXTRACTED TEXT:\n\n"
+                                yield f"{text}\n\n"
+                            if similarity:
+                                yield f"EMBEDDING ID: {embedding_id}\n\n"
+                                yield f"SIMILARITY SCORE: {similarity}\n\n"
+                            if evaluation:
+                                if evaluation.text:
+                                    if evaluation_texts.get(embedding_id):
+                                        evaluation_texts[
+                                            embedding_id
+                                        ] += evaluation.text
+                                    else:
+                                        evaluation_texts[embedding_id] = evaluation.text
+
+                    if patch_record.events and proc_step.show_debug:
+                        do_not_emit = [
+                            "Completed: generate_full_history_summary",
+                            "Completed: generate_prev_record_summary",
+                            "Completed: generate_rag_output",
+                            "Completed: generate_anns_summary",
+                        ]
+                        for event in patch_record.events:
+                            if event.message not in do_not_emit:
+                                yield f"RAG EVENT: {event.message}\nSEVERITY: {event.severity}\nSOURCE: {event.source}\n\n"
+
+                    if patch_record.metrics and proc_step.show_debug:
+                        metrics = patch_record.metrics
+                        yield f"METRICS:\n\n"
+                        yield f"ann_count_after_retrival: {metrics.ann_count_after_retrieval}\n"
+                        yield f"ann_count_after_similarity_min_value: {metrics.ann_count_after_similarity_min_value}\n"
+                        yield f"ann_count_after_relevancy_min_value: {metrics.ann_count_after_relevancy_min_value}\n"
+                        yield f"ann_count_after_relevancy_max_count: {metrics.ann_count_after_relevancy_max_count}\n\n"
+
+                if patch_record.rag_output:
+                    # First check if there are any evaluations to emit
+                    if not emitted_evaluations and proc_step.show_debug is True:
+                        for embedding_id in evaluation_texts.keys():
+                            yield f"EMBEDDING ID: {embedding_id}\n\n"
+                            yield f"EVALUATION:\n\n"
+                            yield f"{evaluation_texts[embedding_id]}\n\n"
+                        emitted_evaluations = True
+                        yield "**END RAG METRICS**\n\n"
+
                     if is_spinning:
                         is_spinning = False
                         yield "```STOP_SPINNING```"
@@ -1020,6 +1084,7 @@ class BPAgent:
                     yield FlowLog(
                         message=f"[RAG] response_count: {resp_count:4d}, elapsed_seconds: {elapsed_time:7.3f}",
                     )
+
         except Exception as e:
             raise e
 

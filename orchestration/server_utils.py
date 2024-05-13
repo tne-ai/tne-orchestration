@@ -541,6 +541,7 @@ def __construct_step_dict(
             "description": node.get("data").get("title"),
             "output_type": node.get("data").get("outputType"),
             "suppress_output": node.get("data").get("outputToCanvas"),
+            "show_debug": node.get("data").get("showDebug"),
             "rag_db_name": node.get("data").get("ragDbName"),
             "data_sources": data_sources,
             "input": step_input,
