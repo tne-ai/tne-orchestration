@@ -1143,6 +1143,11 @@ class BPAgent:
             status_code = response_obj.status_code
 
             if status_code == 200:
+                if is_spinning:
+                    is_spinning = False
+                    yield "```STOP_SPINNING```"
+                    yield "\n"
+
                 response = anns_response_from_json_str(response_obj.content.decode())
                 if is_spinning:
                     is_spinning = False
