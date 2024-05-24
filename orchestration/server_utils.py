@@ -592,6 +592,8 @@ def __construct_step_dict(
             "rag_db_name": node.get("data").get("ragDbName"),
             "data_sources": data_sources,
             "input": step_input,
+            "max_count": node.get("data").get("maxEmbeddings"),
+            "min_similarity": node.get("data").get("similarityThreshold")
         }
         if data_output_name:
             step_dict["data_output_name"] = data_output_name

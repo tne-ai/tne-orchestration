@@ -402,7 +402,9 @@ class BPAgent:
         elif proc_step.type == "semantic":
             semantic_search_messages = []
             try:
-                async for message in self.__run_semantic_search_step(step_input, proc_step, uid):
+                async for message in self.__run_semantic_search_step(
+                    step_input, proc_step, uid
+                ):
                     if type(message) is not FlowLog:
                         semantic_search_messages.append(message)
                     yield message
@@ -1117,10 +1119,15 @@ class BPAgent:
         self, step_input: str, proc_step: ProcessStep, uid: str, session_id: str = ""
     ) -> AsyncGenerator:
         # Create a RagRequest from the step input
+        configs = {}
         if proc_step.rag_db_name:
-            anns_request = create_anns_request(step_input, proc_step.rag_db_name)
-        else:
-            anns_request = create_anns_request(step_input)
+            configs["rag_db_name"] = proc_step.rag_db_name
+        if proc_step.max_count:
+            configs["max_count"] = proc_step.max_count
+        if proc_step.min_similarity:
+            configs["min_similarity"] = proc_step.min_similarity
+
+        anns_request = create_anns_request(step_input, **configs)
 
         # Call the service
         is_spinning = True
@@ -1129,7 +1136,10 @@ class BPAgent:
         try:
             anns_request_bytes = anns_request_to_json_str(anns_request).encode()
             response_obj = requests.post(
-                settings.anns_endpoint, data=anns_request_bytes, headers={"Content-Type": "application/json"} )
+                settings.anns_endpoint,
+                data=anns_request_bytes,
+                headers={"Content-Type": "application/json"},
+            )
             status_code = response_obj.status_code
 
             if status_code == 200:
@@ -1141,7 +1151,9 @@ class BPAgent:
                 for i, ann in enumerate(response.anns):
                     response_str = ""
                     if ann.similarity:
-                        response_str += f"**Embedding #{i+1}** (Similarity: {ann.similarity})\n\n"
+                        response_str += (
+                            f"**Embedding #{i+1}** (Similarity: {ann.similarity})\n\n"
+                        )
                     if ann.text:
                         response_str += f"**Text**\n{ann.text}\n\n"
                     if ann.sources:
@@ -1156,9 +1168,15 @@ class BPAgent:
                     response_str += "\n"
                     yield response_str
             else:
-                yield FlowLog(
-                    error="Error running semantic search. Please try again.",
-                )
+                if is_spinning:
+                    yield "```STOP_SPINNING```"
+                    yield "\n"
+                if status_code == 500:
+                    yield "No results returned from your search. The query may not be relevant to the selected document corpus, but you may also try lowering the Similarity Threshold."
+                else:
+                    yield FlowLog(
+                        error=f"ERROR {status_code}: Error running semantic search. Please try again.",
+                    )
 
         except Exception as e:
             if is_spinning:
