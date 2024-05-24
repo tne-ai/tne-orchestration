@@ -1,3 +1,5 @@
+# type: ignore
+
 from v2.etl.embedder import EmbedderId
 from v2.etl.json_util import read_json, write_json
 from v2.etl.typer_util import typer_arg, typer_opt

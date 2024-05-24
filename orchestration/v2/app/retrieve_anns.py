@@ -6,21 +6,20 @@ from v2.app.state import State
 
 async def retrieve_anns(state: State) -> None:
     anns_input_text = nn(nn(state.updated_record.anns_input).text)
-    rows = await retrieve_related_texts(
-        state.config.embeddings_config,
-        anns_input_text,
-        state.config.ann_retrieval_count,
-    )
+    rows = await retrieve_related_texts(state, anns_input_text)
     ann_count_after_retrieval = len(rows)
+    # TODO(Guy): Filter by ann_similarity_min_value in SQL.
     rows = [row for row in rows if row[2] >= state.config.ann_similarity_min_value]
     ann_count_after_similarity_min_value = len(rows)
     rows = sorted(rows, key=lambda row: row[2], reverse=True)
+    # TODO(Guy): ann_similarity_max_count is semi-redundant with ann_retrieval_count,
+    # especially if filtering by ann_similarity_min_value is done in SQL.
     rows = rows[: state.config.ann_similarity_max_count]
     ann_count_after_similarity_max_count = len(rows)
 
     anns = {
-        embedding_id.hex(): RagAnn(
-            embedding_id=embedding_id.hex(), text=text, similarity=similarity
+        embedding_id: RagAnn(
+            embedding_id=embedding_id, text=text, similarity=similarity
         )
         for embedding_id, text, similarity in rows
     }

@@ -8,7 +8,7 @@ from v2.app.messages_util import (
     system_message,
 )
 from v2.app.nn import nn
-from v2.app.openapi_util import call_chat_completion, max_embedding_token_count
+from v2.app.openai_util import call_chat_completion, max_embedding_token_count
 from v2.app.state import State
 
 
@@ -22,7 +22,7 @@ def _create_messages(
     user_input = nn(state.updated_record.user_input)
 
     # Rough conservative estimate.
-    estimated_word_limit = max_embedding_token_count / 1.5
+    estimated_word_limit = int(max_embedding_token_count / 1.5)
 
     messages.extend(
         [
@@ -68,6 +68,7 @@ def _create_messages(
 async def generate_anns_input(state: State) -> None:
     await call_chat_completion(
         state,
+        "generate_anns_input",
         state.config.anns_input_llm_config,
         _create_messages(state),
         lambda llm_output: RagRecord(anns_input=llm_output),

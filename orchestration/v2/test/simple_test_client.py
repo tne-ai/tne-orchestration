@@ -4,14 +4,16 @@ from typing import List
 from v2.api.api import RagRecord, RagResponse
 from v2.api.util import (
     iterate_streaming_request,
-    record_from_json_str,
-    record_to_json_str,
-    request_from_json_str,
+    rag_record_from_json_str,
+    rag_record_to_json_str,
+    rag_request_from_json_str,
 )
 
 
 def write_patch_records(patch_records_file: str, patch_records: List[RagRecord]):
-    lines = [record_to_json_str(patch_record) + "\n" for patch_record in patch_records]
+    lines = [
+        rag_record_to_json_str(patch_record) + "\n" for patch_record in patch_records
+    ]
     with open(patch_records_file, "w") as patch_records_fp:
         patch_records_fp.writelines(lines)
 
@@ -19,7 +21,7 @@ def write_patch_records(patch_records_file: str, patch_records: List[RagRecord])
 def read_patch_records(patch_records_file: str) -> List[RagRecord]:
     with open(patch_records_file) as patch_records_fp:
         lines = patch_records_fp.readlines()
-    patch_records = [record_from_json_str(line) for line in lines]
+    patch_records = [rag_record_from_json_str(line) for line in lines]
     return patch_records
 
 
@@ -27,7 +29,7 @@ def main():
     _, request_file, patch_records_file = sys.argv
 
     with open(request_file) as request_fp:
-        request = request_from_json_str(request_fp.read())
+        request = rag_request_from_json_str(request_fp.read())
 
     def on_response(response: RagResponse, response_str: str):
         print(response_str)

@@ -13,6 +13,9 @@ class Setting(BaseSettings):
     rag_endpoint: str = Field(
         description="RAG server endpoint",
     )
+    anns_endpoint: str = Field(
+        description="Annotations server endpoint",
+    )
     openai_api_key: str = Field(
         description="OpenAI API key",
     )

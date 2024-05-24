@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Tuple, Union
 
 from v2.api.api import RagRecord
-from v2.api.util import merge_records, record_to_dict
+from v2.api.util import merge_records, rag_record_to_dict
 from v2.test.simple_test_client import read_patch_records
 
 
@@ -77,8 +77,8 @@ def create_delta_dict_helper(old_dict: dict, new_dict: dict) -> DeltaDict:
 
 
 def create_delta_dict(old_record: RagRecord, new_record: RagRecord) -> DeltaDict:
-    old_dict = convert_lists_to_dicts(record_to_dict(old_record))
-    new_dict = convert_lists_to_dicts(record_to_dict(new_record))
+    old_dict = convert_lists_to_dicts(rag_record_to_dict(old_record))
+    new_dict = convert_lists_to_dicts(rag_record_to_dict(new_record))
     return create_delta_dict_helper(old_dict, new_dict)
 
 

@@ -1,3 +1,5 @@
+# type: ignore
+
 import re
 
 from v2.etl.json_util import read_json, write_json

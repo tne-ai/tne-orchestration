@@ -9,7 +9,7 @@ from v2.app.messages_util import (
     system_message,
 )
 from v2.app.nn import nn
-from v2.app.openapi_util import call_chat_completion
+from v2.app.openai_util import call_chat_completion
 from v2.app.state import State
 
 
@@ -86,6 +86,7 @@ async def _extract_relevancy(state: State, text: str) -> float:
 async def generate_ann_relevancy(state: State, embedding_id: EmbeddingId) -> None:
     await call_chat_completion(
         state,
+        "generate_ann_relevancy",
         state.config.ann_relevancies_llm_config,
         _create_messages(state, embedding_id),
         lambda llm_output: RagRecord(

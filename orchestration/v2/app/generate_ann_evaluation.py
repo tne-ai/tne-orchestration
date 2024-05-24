@@ -8,7 +8,7 @@ from v2.app.messages_util import (
     system_message,
 )
 from v2.app.nn import nn
-from v2.app.openapi_util import call_chat_completion
+from v2.app.openai_util import call_chat_completion
 from v2.app.state import State
 
 
@@ -65,6 +65,7 @@ def _create_messages(
 async def generate_ann_evaluation(state: State, embedding_id: EmbeddingId) -> None:
     await call_chat_completion(
         state,
+        "generate_ann_evaluation",
         state.config.ann_evaluations_llm_config,
         _create_messages(state, embedding_id),
         lambda llm_output: RagRecord(

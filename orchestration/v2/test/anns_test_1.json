@@ -1,0 +1,15 @@
+{
+    "request_id": "67c68961-f091-4db7-a614-4014743f9957",
+    "embeddings_config": {
+        "db_host": "postgresql-ebp.cfwmuvh4blso.us-west-2.rds.amazonaws.com",
+        "db_port": 5432,
+        "db_name": "crag_agent_db",
+        "db_username": "postgres",
+        "db_password": "$EMBEDDINGS_DB_PASSWORD",
+        "model": "text-embedding-ada-002",
+        "api_key": "$OPENAI_API_KEY"
+    },
+    "query_text": "What is the maximum gallons per flush allowed for a toilet in Seattle?",
+    "max_count": 10,
+    "min_similarity": 0.8
+}

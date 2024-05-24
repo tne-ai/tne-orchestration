@@ -4,7 +4,7 @@ from openai.types.chat.chat_completion_message_param import ChatCompletionMessag
 
 from v2.api.api import RagRecord
 from v2.app.messages_util import PLACEHOLDER_MESSAGES
-from v2.app.openapi_util import call_chat_completion
+from v2.app.openai_util import call_chat_completion
 from v2.app.state import State
 
 
@@ -20,6 +20,7 @@ def _create_messages(
 async def generate_anns_summary(state: State) -> None:
     await call_chat_completion(
         state,
+        "generate_anns_summary",
         state.config.anns_summary_llm_config,
         _create_messages(state),
         lambda llm_output: RagRecord(anns_summary=llm_output),

@@ -1,3 +1,5 @@
+# type: ignore
+
 import io
 
 from v2.etl.json_util import write_json

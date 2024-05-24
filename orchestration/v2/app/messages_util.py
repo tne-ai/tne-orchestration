@@ -21,7 +21,7 @@ PLACEHOLDER_MESSAGES: List[ChatCompletionMessageParam] = [
 
 def _create_message(role: str, content: str) -> ChatCompletionMessageParam:
     return cast(
-        ChatCompletionMessageParam, {"role": role, "content": dedent(content.strip())}
+        ChatCompletionMessageParam, {"role": role, "content": dedent(content).strip()}
     )
 
 
@@ -63,23 +63,24 @@ def create_history_messages_without_compression(
         user_input = nn(prev_record.user_input)
         messages.append(user_message(user_input))
         relevant_anns = list_relevant_anns(prev_record)
-        for ann in relevant_anns:
-            messages.extend(
-                [
-                    system_message(
-                        f"""
-                        Here is some additional content that may (or may not) be relevant to the user's previous input:
-                        {ann.text}
-                        """
-                    ),
-                    system_message(
-                        f"""
-                        Here is an evaluation of how the additional content may be relevant to the user's previous input:
-                        {ann.evaluation}
-                        """
-                    ),
-                ]
-            )
-        if prev_record.rag_output and prev_record.rag_output.text:
-            messages.append(assistant_message(prev_record.rag_output.text))
+        if relevant_anns:
+            for ann in relevant_anns:
+                messages.extend(
+                    [
+                        system_message(
+                            f"""
+                            Here is some additional content that may (or may not) be relevant to the user's previous input:
+                            {ann.text}
+                            """
+                        ),
+                        system_message(
+                            f"""
+                            Here is an evaluation of how the additional content may be relevant to the user's previous input:
+                            {ann.evaluation}
+                            """
+                        ),
+                    ]
+                )
+            if prev_record.rag_output and prev_record.rag_output.text:
+                messages.append(assistant_message(prev_record.rag_output.text))
     return messages

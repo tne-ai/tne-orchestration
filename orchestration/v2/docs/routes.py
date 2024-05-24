@@ -188,7 +188,7 @@ def add_api_routes_helper(app: FastAPI, base_route: str, sub_routes_tree: dict):
     for key, value in sub_routes_tree.items():
         assert isinstance(key, str)
         if key in ["GET", "POST", "PATCH", "DELETE"]:
-            assert isinstance(value, Callable)
+            assert callable(value)
             app.add_api_route(base_route, value, methods=[key])
         else:
             assert isinstance(value, dict)

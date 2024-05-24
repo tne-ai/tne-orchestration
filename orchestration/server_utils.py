@@ -23,6 +23,7 @@ from orchestration.v2.api.api import (
     RagConfig,
     RagRecord,
     RagRequest,
+    AnnsRequest,
 )
 
 from typing import Union, Dict, Tuple
@@ -33,7 +34,7 @@ PROC_DIR = "proc"
 AGENT_DIR = "manifests"
 CODE_DIR = "modules"
 DATA_DIR = "data"
-OPERATOR_NODES = ["llm", "proc", "python", "rag"]
+OPERATOR_NODES = ["llm", "proc", "python", "rag", "semantic"]
 
 # RAG literals
 RAG_DB_HOST = "postgresql-ebp.cfwmuvh4blso.us-west-2.rds.amazonaws.com"
@@ -43,22 +44,29 @@ def __random_uuid():
     return str(uuid.uuid4())
 
 
+def __get_embeddings_config(rag_db_name):
+    api_key = os.getenv("OPENAI_API_KEY")
+    embeddings_db_pass = os.getenv("EMBEDDINGS_DB_PASSWORD")
+
+    return EmbeddingsConfig(
+        db_host=RAG_DB_HOST,
+        db_port=5432,
+        db_name=rag_db_name,
+        db_username="postgres",
+        db_password=embeddings_db_pass,
+        model="text-embedding-ada-002",
+        api_key=api_key,
+    )
+
+
 def __get_rag_config(rag_db_name):
     """Construct RAGConfig object (currently not configurable)"""
-    embeddings_db_pass = os.getenv("EMBEDDINGS_DB_PASSWORD")
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    shared_llm_config = LlmConfig(model="gpt-4-0125-preview", api_key=openai_api_key)
+    api_key = os.getenv("OPENAI_API_KEY")
+    embeddings_config = __get_embeddings_config(rag_db_name)
+    shared_llm_config = LlmConfig(model="gpt-4-0125-preview", api_key=api_key)
 
     return RagConfig(
-        embeddings_config=EmbeddingsConfig(
-            db_host=RAG_DB_HOST,
-            db_port=5432,
-            db_name=rag_db_name,
-            db_username="postgres",
-            db_password=embeddings_db_pass,
-            model="text-embedding-ada-002",
-            api_key=openai_api_key,
-        ),
+        embeddings_config=embeddings_config,
         anns_input_llm_config=shared_llm_config,
         ann_evaluations_llm_config=shared_llm_config,
         ann_relevancies_llm_config=shared_llm_config,
@@ -74,20 +82,42 @@ def create_rag_request(
     rag_db_name: str = "crag_agent_db",
     config: Optional[RagConfig] = None,
     history: Optional[list] = None,
-):
+) -> RagRequest:
+    # Construct RAG config
     if not config:
         config = __get_rag_config(rag_db_name)
     if not history:
         history = []
-    # Random IDs for now
+
+    # Random request ID and thread ID for now
     request_id = __random_uuid()
     thread_id = __random_uuid()
 
     # Create a new RagRecord and RagRequest using the user input
     new_record = RagRecord(request_id=request_id, config=config, user_input=user_input)
-    request = RagRequest(thread_id=thread_id, history=history, new_record=new_record)
+    return RagRequest(thread_id=thread_id, history=history, new_record=new_record)
 
-    return request
+
+def create_anns_request(
+    query_text: str,
+    rag_db_name: str = "crag_agent_db",
+    max_count: int = 10,
+    min_similarity: float = 0.8,
+) -> AnnsRequest:
+    # Random request ID for now
+    request_id = __random_uuid()
+
+    # Construct embeddings config
+    embeddings_config = __get_embeddings_config(rag_db_name)
+
+    # Construct the AnnsRequest object
+    return AnnsRequest(
+        request_id=request_id,
+        embeddings_config=embeddings_config,
+        query_text=query_text,
+        max_count=max_count,
+        min_similarity=min_similarity,
+    )
 
 
 def is_base64_png(s):
@@ -387,7 +417,7 @@ def parse_s3_proc_data_no_regex(text):
                 data.append({"title": current_title, "filename": current_filename})
         elif "outputType:" in line:
             # Operator node complete
-            if current_type in ["llm", "python", "rag"]:
+            if current_type in ["llm", "python", "rag", "semantic"]:
                 operators.append(
                     {
                         "type": current_type,
@@ -418,7 +448,7 @@ def format_proc(proc_name, operators, data):
     proc_output = f"Proc Name: {proc_name}\n  - Operators:\n"
     for op in operators:
         type_info = f"Type: {op['type']}, Title: {op['title']}"
-        if op["type"] in ["llm", "rag"]:  # Treat 'rag' similar to 'llm'
+        if op["type"] in ["llm", "rag", "semantic"]:  # Treat 'rag' similar to 'llm'
             manifest = op.get("manifest", "")
             type_info += f", Manifest: {manifest}"
         elif op["type"] == "python":
@@ -538,6 +568,23 @@ def __construct_step_dict(
         step_dict = {
             "name": "rag",
             "type": "rag",
+            "description": node.get("data").get("title"),
+            "output_type": node.get("data").get("outputType"),
+            "suppress_output": node.get("data").get("outputToCanvas"),
+            "show_debug": node.get("data").get("showDebug"),
+            "rag_db_name": node.get("data").get("ragDbName"),
+            "data_sources": data_sources,
+            "input": step_input,
+        }
+        if data_output_name:
+            step_dict["data_output_name"] = data_output_name
+
+        return step_dict
+
+    elif node.get("type") == "semantic":
+        step_dict = {
+            "name": "semantic_search",
+            "type": "semantic",
             "description": node.get("data").get("title"),
             "output_type": node.get("data").get("outputType"),
             "suppress_output": node.get("data").get("outputToCanvas"),

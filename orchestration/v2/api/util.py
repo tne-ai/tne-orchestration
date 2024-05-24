@@ -4,6 +4,7 @@ import json
 import time
 from typing import (
     Any,
+    AsyncGenerator,
     Callable,
     Coroutine,
     Dict,
@@ -12,7 +13,6 @@ from typing import (
     Tuple,
     Type,
     TypeVar,
-    AsyncGenerator,
 )
 
 import httpx
@@ -20,7 +20,7 @@ import requests
 import yaml
 from pydantic import BaseModel
 
-from v2.api.api import RagRecord, RagRequest, RagResponse
+from v2.api.api import AnnsRequest, AnnsResponse, RagRecord, RagRequest, RagResponse
 from v2.api.updatable import merge_updatable_models
 
 
@@ -43,8 +43,10 @@ def model_to_dict(model: _T) -> Dict[str, Any]:
     return model.model_dump(exclude_none=True, exclude_defaults=True)
 
 
-def model_to_json_str(model: _T) -> str:
-    return model.model_dump_json(exclude_none=True, exclude_defaults=True)
+def model_to_json_str(model: _T, indent: Optional[int] = None) -> str:
+    return model.model_dump_json(
+        exclude_none=True, exclude_defaults=True, indent=indent
+    )
 
 
 def model_to_yaml_str(model: _T, root_field_name: Optional[str] = "model") -> str:
@@ -73,25 +75,25 @@ def model_from_json_str(model_type: Type[_T], json_str: str) -> _T:
 #
 
 
-def request_to_dict(request: RagRequest) -> Dict[str, Any]:
+def rag_request_to_dict(request: RagRequest) -> Dict[str, Any]:
     return model_to_dict(request)
 
 
-def request_to_json_str(request: RagRequest) -> str:
-    return model_to_json_str(request)
+def rag_request_to_json_str(request: RagRequest, indent: Optional[int] = None) -> str:
+    return model_to_json_str(request, indent)
 
 
-def request_to_yaml_str(
+def rag_request_to_yaml_str(
     request: RagRequest, root_field_name: Optional[str] = "request"
 ) -> str:
     return model_to_yaml_str(request, root_field_name)
 
 
-def request_from_dict(dict_: Dict[str, Any]) -> RagRequest:
+def rag_request_from_dict(dict_: Dict[str, Any]) -> RagRequest:
     return model_from_dict(RagRequest, dict_)
 
 
-def request_from_json_str(json_str: str) -> RagRequest:
+def rag_request_from_json_str(json_str: str) -> RagRequest:
     return model_from_json_str(RagRequest, json_str)
 
 
@@ -100,25 +102,27 @@ def request_from_json_str(json_str: str) -> RagRequest:
 #
 
 
-def response_to_dict(response: RagResponse) -> Dict[str, Any]:
+def rag_response_to_dict(response: RagResponse) -> Dict[str, Any]:
     return model_to_dict(response)
 
 
-def response_to_json_str(response: RagResponse) -> str:
-    return model_to_json_str(response)
+def rag_response_to_json_str(
+    response: RagResponse, indent: Optional[int] = None
+) -> str:
+    return model_to_json_str(response, indent)
 
 
-def response_to_yaml_str(
+def rag_response_to_yaml_str(
     response: RagResponse, root_field_name: Optional[str] = "response"
 ) -> str:
     return model_to_yaml_str(response, root_field_name)
 
 
-def response_from_dict(dict_: Dict[str, Any]) -> RagResponse:
+def rag_response_from_dict(dict_: Dict[str, Any]) -> RagResponse:
     return model_from_dict(RagResponse, dict_)
 
 
-def response_from_json_str(json_str: str) -> RagResponse:
+def rag_response_from_json_str(json_str: str) -> RagResponse:
     return model_from_json_str(RagResponse, json_str)
 
 
@@ -127,26 +131,82 @@ def response_from_json_str(json_str: str) -> RagResponse:
 #
 
 
-def record_to_dict(record: RagRecord) -> Dict[str, Any]:
+def rag_record_to_dict(record: RagRecord) -> Dict[str, Any]:
     return model_to_dict(record)
 
 
-def record_to_json_str(record: RagRecord) -> str:
-    return model_to_json_str(record)
+def rag_record_to_json_str(record: RagRecord, indent: Optional[int] = None) -> str:
+    return model_to_json_str(record, indent)
 
 
-def record_to_yaml_str(
+def rag_record_to_yaml_str(
     record: RagRecord, root_field_name: Optional[str] = "record"
 ) -> str:
     return model_to_yaml_str(record, root_field_name)
 
 
-def record_from_dict(dict_: Dict[str, Any]) -> RagRecord:
+def rag_record_from_dict(dict_: Dict[str, Any]) -> RagRecord:
     return model_from_dict(RagRecord, dict_)
 
 
-def record_from_json_str(json_str: str) -> RagRecord:
+def rag_record_from_json_str(json_str: str) -> RagRecord:
     return model_from_json_str(RagRecord, json_str)
+
+
+#
+# AnnsRequest typed wrapper functions for serialization/deserialization:
+#
+
+
+def anns_request_to_dict(request: AnnsRequest) -> Dict[str, Any]:
+    return model_to_dict(request)
+
+
+def anns_request_to_json_str(request: AnnsRequest, indent: Optional[int] = None) -> str:
+    return model_to_json_str(request, indent)
+
+
+def anns_request_to_yaml_str(
+    request: AnnsRequest, root_field_name: Optional[str] = "request"
+) -> str:
+    return model_to_yaml_str(request, root_field_name)
+
+
+def anns_request_from_dict(dict_: Dict[str, Any]) -> AnnsRequest:
+    return model_from_dict(AnnsRequest, dict_)
+
+
+def anns_request_from_json_str(json_str: str) -> AnnsRequest:
+    return model_from_json_str(AnnsRequest, json_str)
+
+
+#
+# AnnsResponse typed wrapper functions for serialization/deserialization:
+#
+
+
+def anns_response_to_dict(response: AnnsResponse) -> Dict[str, Any]:
+    return model_to_dict(response)
+
+
+def anns_response_to_json_str(
+    response: AnnsResponse, indent: Optional[int] = None
+) -> str:
+    return model_to_json_str(response, indent)
+
+
+def anns_response_to_yaml_str(
+    response: AnnsResponse, root_field_name: Optional[str] = "response"
+) -> str:
+    return model_to_yaml_str(response, root_field_name)
+
+
+def anns_response_from_dict(dict_: Dict[str, Any]) -> AnnsResponse:
+    return model_from_dict(AnnsResponse, dict_)
+
+
+def anns_response_from_json_str(json_str: str) -> AnnsResponse:
+    return model_from_json_str(AnnsResponse, json_str)
 
 
 #
@@ -161,7 +221,7 @@ def iterate_streaming_request(
     on_response: Callable[[RagResponse, str], None],
     on_error: Callable[[int, str], bool],
 ) -> Optional[Tuple[List[RagResponse], int, int, float]]:
-    request_bytes = request_to_json_str(request).encode()
+    request_bytes = rag_request_to_json_str(request).encode()
     start_seconds = time.time()
     response_obj = requests.post(
         service_url,
@@ -185,7 +245,7 @@ def iterate_streaming_request(
             if not keep_going:
                 return None
             continue
-        response = response_from_json_str(line_str)
+        response = rag_response_from_json_str(line_str)
         responses.append(response)
         on_response(response, line_str)
     elapsed_seconds = time.time() - start_seconds
@@ -204,7 +264,7 @@ async def async_iterate_streaming_request(
     on_response: Callable[[RagResponse, str], Coroutine[None, None, None]],
     on_error: Callable[[int, str], Coroutine[None, None, bool]],
 ) -> Optional[Tuple[List[RagResponse], int, int, float]]:
-    request_bytes = request_to_json_str(request).encode()
+    request_bytes = rag_request_to_json_str(request).encode()
     start_seconds = time.time()
     client = httpx.AsyncClient()
     async with client.stream(
@@ -230,7 +290,7 @@ async def async_iterate_streaming_request(
                 if not keep_going:
                     return None
                 continue
-            response = response_from_json_str(line)
+            response = rag_response_from_json_str(line)
             responses.append(response)
             await on_response(response, line)
     elapsed_seconds = time.time() - start_seconds
@@ -243,7 +303,7 @@ async def async_iterate_streaming_request_generator(
     on_response: Callable[[RagResponse, str], Coroutine[None, None, None]],
     on_error: Callable[[int, str], Coroutine[None, None, bool]],
 ) -> AsyncGenerator[RagResponse, None]:
-    request_bytes = request_to_json_str(request).encode()
+    request_bytes = rag_request_to_json_str(request).encode()
     client = httpx.AsyncClient()
     async with client.stream(
         "POST",
@@ -264,6 +324,6 @@ async def async_iterate_streaming_request_generator(
                 if not keep_going:
                     return
                 continue
-            rag_response = response_from_json_str(line)
+            rag_response = rag_response_from_json_str(line)
             await on_response(rag_response, line)
             yield rag_response

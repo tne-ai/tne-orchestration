@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from v2.api.api import (
@@ -15,6 +16,14 @@ from v2.api.api import (
 )
 from v2.api.util import merge_records
 from v2.app.nn import nn
+from v2.app.s3_debug import (
+    S3DebugDesc,
+    S3DebugObject,
+    S3DebugQueue,
+    S3DebugSite,
+    S3DebugSiteObject,
+    get_current_span_context,
+)
 
 
 class State:
@@ -22,17 +31,39 @@ class State:
         self,
         request: RagRequest,
         patch_records_queue: asyncio.Queue,
+        s3_debug_queue: S3DebugQueue,
     ):
         self.request = request
         self.updated_record = request.new_record
         self.config: RagConfig = nn(request.new_record.config)
         self.patch_records_queue = patch_records_queue
+        self.s3_debug_queue = s3_debug_queue
+        self.next_call_id_int = 0
         self.finalized = False
 
-    async def finalize(self):
+    async def finalize(self) -> None:
         assert not self.finalized
         self.finalized = True
         await self.patch_records_queue.put(None)
+        await self.s3_debug_queue.put(None)
+
+    def next_call_id(self) -> str:
+        assert not self.finalized
+        formatted_next_call_id = f"{self.next_call_id_int:03d}"
+        self.next_call_id_int = (self.next_call_id_int + 1) % 1_000
+        return formatted_next_call_id
+
+    async def put_s3_debug_object(
+        self, s3_debug_desc: S3DebugDesc, s3_debug_object: S3DebugObject
+    ):
+        assert not self.finalized
+        s3_debut_site: S3DebugSite = (
+            datetime.now(timezone.utc),
+            get_current_span_context(),
+            s3_debug_desc,
+        )
+        s3_debug_site_object: S3DebugSiteObject = (s3_debut_site, s3_debug_object)
+        await self.s3_debug_queue.put(s3_debug_site_object)
 
     async def put_record_obj(self, patch_record: RagRecord):
         assert not self.finalized

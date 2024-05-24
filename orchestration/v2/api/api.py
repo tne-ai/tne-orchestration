@@ -80,6 +80,8 @@ class RagConfig(UpdatableModel):
     ann_evaluation_before_relevancy: bool = UF(True, UP.reject)
     ann_retrieval_count: int = UF(20, UP.reject)
     ann_similarity_min_value: float = UF(0.8, UP.reject)
+    # TODO(Guy): ann_similarity_max_count is semi-redundant with ann_retrieval_count,
+    # especially if filtering by ann_similarity_min_value is done in SQL.
     ann_similarity_max_count: int = UF(10, UP.reject)
     ann_relevancy_min_value: float = UF(0.8, UP.reject)
     ann_relevancy_max_count: int = UF(5, UP.reject)
@@ -95,16 +97,27 @@ class LlmOutput(UpdatableModel):
     token_count: Optional[int] = UF(None, UP.set_once)
 
 
+class RagAnnSource(UpdatableModel):
+    "An original source of a RagAnn result."
+
+    file_path: Optional[str] = UF(None, UP.set_once)
+
+    # TODO(Guy): Implement more precise source info:
+    # - start_page_number
+    # - start_char_offset
+
+
 class RagAnn(UpdatableModel):
     "A single approximate nearest neighbor (ANN) result."
 
-    # embedding_id also leads to embedding vector, text, and source
+    # embedding_id also leads to embedding vector, text, and sources
     embedding_id: EmbeddingId = UF(None, UP.expect_equal)
-    text: Optional[str] = UF(None, UP.concat)
+    text: Optional[str] = UF(None, UP.set_once)
     similarity: Optional[float] = UF(None, UP.set_once)
     evaluation: Optional[LlmOutput] = UF(None, UP.merge)
     raw_relevancy: Optional[LlmOutput] = UF(None, UP.merge)
     relevancy: Optional[float] = UF(None, UP.set_once)
+    sources: Optional[List[RagAnnSource]] = UF(None, UP.set_once)
 
 
 class RagEventSeverity(Enum):
@@ -175,6 +188,11 @@ class RagRecord(UpdatableModel):
     # TODO(Guy): Multiple ANN query inputs?
 
 
+#
+# RagRequest and RagResponse are for the /v2/rag web endpoint.
+#
+
+
 class RagRequest(BaseModel):
     "A single RagRequest will be posted to the API."
 
@@ -188,3 +206,34 @@ class RagResponse(BaseModel):
 
     thread_id: ThreadId  # Is this helpful in response?
     patch_record: RagRecord
+
+
+#
+# AnnsRequest and AnnsResponse are for the /v2/anns web endpoint.
+#
+# This ANNs API was added after the above RAG-focused design was done,
+# and it borrows from the above design, trying to keep things somewhat
+# cohesive, but there are still some rough edges that stick out.
+#
+# This whole API needs to be reworked. Particularly in light of:
+# - The goal of decomposing RAG into components.
+# - The need to add RAG DB management API.
+#
+
+
+class AnnsRequest(BaseModel):
+    "A single AnnsRequest will be posted to the API."
+
+    request_id: RequestId
+    embeddings_config: EmbeddingsConfig
+    query_text: str
+    max_count: int
+    min_similarity: float
+
+
+class AnnsResponse(BaseModel):
+    "A single AnnsResponses will be sent back from the API."
+
+    request_id: RequestId
+    anns: List[RagAnn]
+

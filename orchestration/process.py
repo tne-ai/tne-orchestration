@@ -34,11 +34,15 @@ from orchestration.server_utils import (
     parse_s3_proc_data_no_regex,
     is_base64_image,
     create_rag_request,
+    create_anns_request,
 )
 from orchestration.settings import settings
 from orchestration.v2.api.api import RagResponse
 from orchestration.v2.api.util import (
     async_iterate_streaming_request_generator,
+    anns_request_to_json_str,
+    anns_response_to_yaml_str,
+    anns_response_from_json_str,
 )
 
 # Uncomment below to use local SlashGPT
@@ -394,6 +398,21 @@ class BPAgent:
                 raise e
             rag_response = "".join(rag_messages)
             step_output.text = rag_response
+
+        elif proc_step.type == "semantic":
+            semantic_search_messages = []
+            try:
+                async for message in self.__run_semantic_search_step(step_input, proc_step, uid):
+                    if type(message) is not FlowLog:
+                        semantic_search_messages.append(message)
+                    yield message
+                semantic_search_resp = "".join(semantic_search_messages)
+                step_output.text = semantic_search_resp
+            except Exception as e:
+                raise e
+            semantic_search_resp = "".join(semantic_search_messages)
+            step_output.text = semantic_search_resp
+
         else:
             raise NotImplementedError(f"Unrecognized step type {proc_step.type}")
 
@@ -1086,6 +1105,65 @@ class BPAgent:
                     )
 
         except Exception as e:
+            yield FlowLog(
+                error="Error running RAG. Please try again.",
+            )
+            if is_spinning:
+                yield "```STOP_SPINNING```"
+                yield "\n"
+            raise e
+
+    async def __run_semantic_search_step(
+        self, step_input: str, proc_step: ProcessStep, uid: str, session_id: str = ""
+    ) -> AsyncGenerator:
+        # Create a RagRequest from the step input
+        if proc_step.rag_db_name:
+            anns_request = create_anns_request(step_input, proc_step.rag_db_name)
+        else:
+            anns_request = create_anns_request(step_input)
+
+        # Call the service
+        is_spinning = True
+        yield "```SET_IS_SPINNING```"
+        yield "\n"
+        try:
+            anns_request_bytes = anns_request_to_json_str(anns_request).encode()
+            response_obj = requests.post(
+                settings.anns_endpoint, data=anns_request_bytes, headers={"Content-Type": "application/json"} )
+            status_code = response_obj.status_code
+
+            if status_code == 200:
+                response = anns_response_from_json_str(response_obj.content.decode())
+                if is_spinning:
+                    is_spinning = False
+                    yield "```STOP_SPINNING"
+                    yield "\n"
+                for i, ann in enumerate(response.anns):
+                    response_str = ""
+                    if ann.similarity:
+                        response_str += f"**Embedding #{i+1}** (Similarity: {ann.similarity})\n\n"
+                    if ann.text:
+                        response_str += f"**Text**\n{ann.text}\n\n"
+                    if ann.sources:
+                        response_str += f"**Sources**\n"
+                        for source in ann.sources:
+                            response_str += f"  * {source.file_path}\n"
+                        response_str += f"\n"
+                    if ann.evaluation:
+                        response_str += f"**Evaluation**\n{ann.evaluation}\n"
+                    if ann.relevancy:
+                        response_str += f"**Relevancy**\n{ann.relevancy}\n"
+                    response_str += "\n"
+                    yield response_str
+            else:
+                yield FlowLog(
+                    error="Error running semantic search. Please try again.",
+                )
+
+        except Exception as e:
+            if is_spinning:
+                yield "```STOP_SPINNING```"
+                yield "\n"
             raise e
 
     async def __run_llm_python_code(

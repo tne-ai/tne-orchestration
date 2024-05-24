@@ -1,3 +1,5 @@
+# type: ignore
+
 from v2.etl.cmd_cleanse_combine_and_split import cleanse_combine_and_split
 from v2.etl.cmd_extract_pdf_text import extract_pdf_text
 from v2.etl.cmd_insert_embeddings_and_sources import insert_embeddings_and_sources

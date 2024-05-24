@@ -14,7 +14,7 @@ MY_TNE_ROOT=~/work/repos/github.com/TNE-ai
 # Run these commands for local RAG service testing.
 cd $MY_TNE_ROOT/troopship/rag
 docker build . -t rag:latest
-docker run --rm -p 8080:8080 rag:latest
+docker run --rm -p 8080:8080 -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN rag:latest
 ```
 
 You should see output like this:
@@ -94,7 +94,7 @@ After roughly 30 seconds (v1 is not streaming) you should see a json response ob
 
 ```sh
 cd $MY_TNE_ROOT/troopship/rag
-./v2/test/test_0.sh
+./v2/test/rag_test_1.sh
 ```
 
 You should see a bunch of lines output that begin like this:
@@ -112,7 +112,7 @@ Those are the streamed patch records which can be merged into the original reque
 Next use this python test script, which does roughly the same thing as the above shell script, but also saves the received patch records to the given file:
 
 ```sh
-python -m v2.test.simple_test_client <(v2/test/test_0_json.sh) /tmp/patch_records.txt
+python -m v2.test.simple_test_client <(v2/test/rag_test_1_json.sh) /tmp/patch_records.txt
 less /tmp/patch_records.txt
 ```
 
@@ -137,7 +137,7 @@ To control playback:
 
 ## To test v2 interactively:
 
-Both `v2/test/test_0.sh` and `v2/test/simple_test_client.py` simply send a single canned request and output the response in one way or another. There is now a test client that is an interactive loop allowing a sequence of multiple user inputs, and maintains (transient) history of the request/response thread. Here's how you run it:
+Both `v2/test/rag_test_1.sh` and `v2/test/simple_test_client.py` simply send a single canned request and output the response in one way or another. There is now a test client that is an interactive loop allowing a sequence of multiple user inputs, and maintains (transient) history of the request/response thread. Here's how you run it:
 
 ```sh
 # Setup of venv and local_secrets.env described above.

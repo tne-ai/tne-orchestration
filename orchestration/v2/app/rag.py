@@ -9,7 +9,7 @@ from v2.api.api import (
     RequestId,
     ThreadId,
 )
-from v2.api.util import merge_records
+from v2.api.util import merge_records, rag_record_to_dict, rag_request_to_dict
 from v2.app.generate_ann_evaluation import generate_ann_evaluation
 from v2.app.generate_ann_relevancy import generate_ann_relevancy
 from v2.app.generate_anns_input import generate_anns_input
@@ -18,7 +18,9 @@ from v2.app.generate_full_history_summary import generate_full_history_summary
 from v2.app.generate_prev_record_summary import generate_prev_record_summary
 from v2.app.generate_rag_output import generate_rag_output
 from v2.app.nn import nn
+from v2.app.retrieve_ann_sources import retrieve_ann_sources
 from v2.app.retrieve_anns import retrieve_anns
+from v2.app.s3_debug import S3DebugQueue, process_s3_debug_queue
 from v2.app.state import State
 
 # TODO(Guy): Handle client cancellation (e.g. connection closed).
@@ -83,18 +85,24 @@ async def generate_ann_evaluations_and_relevancies(state: State) -> None:
 
 
 async def rag(request: RagRequest, responses_queue: asyncio.Queue) -> None:
+
+    thread_id = request.thread_id
+    request_id = request.new_record.request_id
     records_queue_max_size = min(100_000, 10 * responses_queue.maxsize)
     patch_records_queue: asyncio.Queue = asyncio.Queue(maxsize=records_queue_max_size)
+    s3_debug_queue = S3DebugQueue(1_000)
     batch_merge_patch_records_into_responses_task = asyncio.create_task(
         batch_merge_patch_records_into_responses(
-            request.thread_id,
-            request.new_record.request_id,
-            patch_records_queue,
-            responses_queue,
+            thread_id, request_id, patch_records_queue, responses_queue
         )
     )
+    # This process_s3_debug_queue task will not be awaited.
+    # The rag process can proceed and complete even if this task is still running.
+    asyncio.create_task(process_s3_debug_queue(thread_id, request_id, s3_debug_queue))
 
-    state = State(request, patch_records_queue)
+    state = State(request, patch_records_queue, s3_debug_queue)
+
+    await state.put_s3_debug_object("request", rag_request_to_dict(request))
 
     try:
         generate_prev_record_summary_task = asyncio.create_task(
@@ -105,11 +113,13 @@ async def rag(request: RagRequest, responses_queue: asyncio.Queue) -> None:
         )
         await generate_anns_input(state)
         await retrieve_anns(state)
+        retrieve_ann_sources_task = asyncio.create_task(retrieve_ann_sources(state))
         await generate_ann_evaluations_and_relevancies(state)
         generate_anns_summary_task = asyncio.create_task(generate_anns_summary(state))
         await generate_rag_output(state)
         await generate_prev_record_summary_task
         await generate_full_history_summary_task
+        await retrieve_ann_sources_task
         await generate_anns_summary_task
 
     except Exception as exception:
@@ -117,5 +127,10 @@ async def rag(request: RagRequest, responses_queue: asyncio.Queue) -> None:
         logger.exception(message)
         await state.put_internal_error_event(message)
 
+    final_merged_record = state.updated_record.model_copy()
+    await state.put_s3_debug_object(
+        "final_merged_record", rag_record_to_dict(final_merged_record)
+    )
     await state.finalize()
+
     await batch_merge_patch_records_into_responses_task

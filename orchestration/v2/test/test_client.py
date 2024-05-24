@@ -18,7 +18,7 @@ from v2.api.api import (
 from v2.api.util import (
     async_iterate_streaming_request,
     merge_records,
-    record_to_yaml_str,
+    rag_record_to_yaml_str,
 )
 
 
@@ -110,7 +110,7 @@ async def main():
         for patch_record in patch_records:
             merged_record = merge_records(merged_record, patch_record)
         print(f"\n{'-' * 80}\n")
-        print(record_to_yaml_str(merged_record, "merged_record"))
+        print(rag_record_to_yaml_str(merged_record, "merged_record"))
 
         print(f"\n{'-' * 80}\n")
         print(f"response_count:         {response_count:6d}")
