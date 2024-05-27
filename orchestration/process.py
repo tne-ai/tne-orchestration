@@ -2,7 +2,6 @@ import asyncio
 import base64
 import copy
 import inspect
-
 # Temporary function call workarounds to be incorporated into SlashGPT
 import json
 import os
@@ -15,14 +14,7 @@ from typing import Any, Dict, Union, Optional, AsyncGenerator
 import pandas as pd
 import requests
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError
-
-from pydantic import BaseModel
 from openai import AsyncOpenAI
-from slashgpt.chat_session import ChatSession
-from tabulate import tabulate
-
-import krt
-
 from orchestration.bp import BP, ProcessStep
 from orchestration.server_utils import (
     generate_stream,
@@ -41,9 +33,13 @@ from orchestration.v2.api.api import RagResponse
 from orchestration.v2.api.util import (
     async_iterate_streaming_request_generator,
     anns_request_to_json_str,
-    anns_response_to_yaml_str,
     anns_response_from_json_str,
 )
+from pydantic import BaseModel
+from slashgpt.chat_session import ChatSession
+from tabulate import tabulate
+
+import krt
 
 # Uncomment below to use local SlashGPT
 # sys.path.append(os.path.join(os.path.dirname(__file__), "../../SlashTNE/src"))
@@ -95,7 +91,7 @@ async def collect_messages(generator: AsyncGenerator):
 
 
 async def vega_chart(
-    df_data: pd.DataFrame, uid: str, max_retries: int = 3
+        df_data: pd.DataFrame, uid: str, max_retries: int = 3
 ) -> Optional[str]:
     retry_no = 0
     chart = None
@@ -157,20 +153,21 @@ class BPAgent:
         self._callback(callback_type, data)
 
     async def __run_step(
-        self,
-        proc_step,
-        proc,
-        step_input,
-        dispatched_input,
-        uid,
-        session_id,
-        is_spinning,
+            self,
+            proc_step,
+            proc,
+            step_input,
+            dispatched_input,
+            uid,
+            session_id,
+            is_spinning,
     ) -> AsyncGenerator:
         # TEMPORARY: route all tne-branded models to groq
         if proc_step.manifest:
             manifest_model = proc_step.manifest.get("model")
             if manifest_model:
-                if "tne" in manifest_model.get("model_name"):
+                model_name = manifest_model.get("model_name")
+                if "tne" in model_name and "bigtext" not in model_name:
                     proc_step.manifest["model"]["model_name"] = "llama3-70b-8192"
 
         # Handle special case where a LLM step picks from a list of manifests to run
@@ -198,13 +195,13 @@ class BPAgent:
 
             # Function call
             elif not proc_step.manifest.get("model") and proc_step.manifest.get(
-                "functions"
+                    "functions"
             ):
                 proc_step.manifest.update({"stream": False})
                 collected_messages = []
                 try:
                     async for message in self.__run_llm_step(
-                        step_input, proc_step, uid
+                            step_input, proc_step, uid
                     ):
                         if type(message) is not FlowLog:
                             collected_messages.append(message)
@@ -230,7 +227,7 @@ class BPAgent:
             elif proc_step.manifest.get("model").get("model_name") in image_models:
                 try:
                     async for message in self.__run_llm_step(
-                        step_input, proc_step, uid
+                            step_input, proc_step, uid
                     ):
                         if type(message) is FlowLog:
                             yield message
@@ -248,17 +245,17 @@ class BPAgent:
                         "imageFilename"
                     )
                     filename_gen_manifest["prompt"] = (
-                        filename_gen_manifest["prompt"] + f"\n\n{data_filenames}"
+                            filename_gen_manifest["prompt"] + f"\n\n{data_filenames}"
                     )
 
                     collected_messages = []
                     try:
                         async for message in self.process_llm(
-                            img_url,
-                            None,
-                            uid,
-                            filename_gen_manifest,
-                            session_id=session_id,
+                                img_url,
+                                None,
+                                uid,
+                                filename_gen_manifest,
+                                session_id=session_id,
                         ):
                             if type(message) is not FlowLog:
                                 collected_messages.append(message)
@@ -286,7 +283,7 @@ class BPAgent:
             else:
                 try:
                     async for message in self.__run_llm_step(
-                        step_input, proc_step, uid
+                            step_input, proc_step, uid
                     ):
                         if type(message) is not FlowLog:
                             llm_step_messages.append(message)
@@ -374,11 +371,11 @@ class BPAgent:
                 raise IOError(f"Could not find sub-process: {proc_step.name}")
             try:
                 async for message in self.run_proc(
-                    step_input,
-                    sub_proc,
-                    uid,
-                    True,
-                    session_id=session_id,
+                        step_input,
+                        sub_proc,
+                        uid,
+                        True,
+                        session_id=session_id,
                 ):
                     if type(message) is LLMResponse:
                         step_output = message
@@ -403,7 +400,7 @@ class BPAgent:
             semantic_search_messages = []
             try:
                 async for message in self.__run_semantic_search_step(
-                    step_input, proc_step, uid
+                        step_input, proc_step, uid
                 ):
                     if type(message) is not FlowLog:
                         semantic_search_messages.append(message)
@@ -421,13 +418,13 @@ class BPAgent:
         yield step_output
 
     async def process_llm(
-        self,
-        question: str,
-        proc_step: Optional[ProcessStep],
-        uid: str,
-        manifest: Dict = None,
-        session_id: str = "",
-        use_alias: Optional[bool] = False,
+            self,
+            question: str,
+            proc_step: Optional[ProcessStep],
+            uid: str,
+            manifest: Dict = None,
+            session_id: str = "",
+            use_alias: Optional[bool] = False,
     ) -> AsyncGenerator:
         """Call the LLM (more documentation forthcoming)."""
         if use_alias:
@@ -464,10 +461,10 @@ class BPAgent:
                             df_data = StringIO(data)
                             df = pd.read_csv(df_data)
                             data_str = (
-                                f"{data_source}: "
-                                + ", ".join(df.columns.tolist())
-                                + f"\n{data_source} sample rows: "
-                                + f"{df.head(3).to_json()}"
+                                    f"{data_source}: "
+                                    + ", ".join(df.columns.tolist())
+                                    + f"\n{data_source} sample rows: "
+                                    + f"{df.head(3).to_json()}"
                             )
                         except Exception as e:
                             raise ValueError(
@@ -539,11 +536,11 @@ class BPAgent:
                     res = None
                     # Non-streaming cases, like function calling or image generation
                     if (
-                        manifest.get("stream") in [False, None]
-                        or manifest.get("tool_code") is not None
+                            manifest.get("stream") in [False, None]
+                            or manifest.get("tool_code") is not None
                     ):
                         async for message in session.call_loop(
-                            self._process_event, None
+                                self._process_event, None
                         ):
                             if message:
                                 res = message
@@ -552,7 +549,7 @@ class BPAgent:
                     else:
                         collected_messages = []
                         async for message in session.call_loop(
-                            self._process_event, None
+                                self._process_event, None
                         ):
                             if type(message) is not FlowLog:
                                 collected_messages.append(message)
@@ -575,10 +572,10 @@ class BPAgent:
             )
 
     async def inference(
-        self,
-        question,
-        uid: str,
-        session_id: str = "",
+            self,
+            question,
+            uid: str,
+            session_id: str = "",
     ) -> AsyncGenerator:
         """Manages LLM inference (more documentation forthcoming)."""
 
@@ -601,13 +598,13 @@ class BPAgent:
                     except Exception as e:
                         aws_token_error = True
                         async for chunk in generate_stream(
-                            f"Error pulling process [{proc_name}] from S3. Please check your AWS credentials."
+                                f"Error pulling process [{proc_name}] from S3. Please check your AWS credentials."
                         ):
                             yield chunk
                     # Could not find a matching process
                     if not user_proc and not aws_token_error:
                         async for chunk in generate_stream(
-                            f"Could not find a process called {proc_name}"
+                                f"Could not find a process called {proc_name}"
                         ):
                             yield chunk
 
@@ -618,7 +615,7 @@ class BPAgent:
                         dummy_manifest = dummy_proc.manifests.get("chat")
                     except Exception as e:
                         async for chunk in generate_stream(
-                            f"Error pulling process [Assistant] from S3. Please check your AWS credentials."
+                                f"Error pulling process [Assistant] from S3. Please check your AWS credentials."
                         ):
                             yield chunk
 
@@ -631,19 +628,19 @@ class BPAgent:
                     proc_bucket_contents = get_s3_dir_summary(BUCKET_NAME, proc_s3_path)
 
                     dummy_manifest["prompt"] = (
-                        parse_s3_proc_data_no_regex(proc_bucket_contents)
-                        + dummy_manifest["prompt"]
+                            parse_s3_proc_data_no_regex(proc_bucket_contents)
+                            + dummy_manifest["prompt"]
                     )
                     # Determine if user wants information about the system, or wants to run a process
                     stream_to_ui = True
                     collected_messages = []
                     try:
                         async for message in self.process_llm(
-                            question,
-                            None,
-                            uid,
-                            dummy_manifest,
-                            session_id=session_id,
+                                question,
+                                None,
+                                uid,
+                                dummy_manifest,
+                                session_id=session_id,
                         ):
                             if type(message) is FlowLog:
                                 yield message
@@ -674,7 +671,7 @@ class BPAgent:
                             )
             except (IndexError, ValueError):
                 async for chunk in generate_stream(
-                    "Could not detect a valid process in your query. Please try again."
+                        "Could not detect a valid process in your query. Please try again."
                 ):
                     yield chunk
             except Exception as e:
@@ -688,15 +685,15 @@ class BPAgent:
                 try:
                     # message: Tuple[Union[str, LLMResponse], bool]
                     async for message in self.run_proc(
-                        question,
-                        user_proc,
-                        uid,
-                        session_id=session_id,
+                            question,
+                            user_proc,
+                            uid,
+                            session_id=session_id,
                     ):
                         if type(message) is tuple:
                             if (
-                                type(message[0]) is not LLMResponse
-                                and message[1] is True
+                                    type(message[0]) is not LLMResponse
+                                    and message[1] is True
                             ):
                                 yield message[0]
                         else:
@@ -714,13 +711,13 @@ class BPAgent:
             raise e
 
     async def run_proc(
-        self,
-        question: str,
-        proc: BP,
-        uid: str,
-        is_sub_proc: bool = False,
-        step_no: int = 0,
-        session_id: str = "",
+            self,
+            question: str,
+            proc: BP,
+            uid: str,
+            is_sub_proc: bool = False,
+            step_no: int = 0,
+            session_id: str = "",
     ) -> AsyncGenerator:
         self.orig_question = question
         step_input = question
@@ -757,8 +754,8 @@ class BPAgent:
                         yield "```SET_IS_SPINNING```"
                         yield "\n"
                     elif (
-                        proc_step.manifest.get("model").get("model_name")
-                        in image_models
+                            proc_step.manifest.get("model").get("model_name")
+                            in image_models
                     ):
                         is_spinning = True
                         yield "```SET_IS_SPINNING```"
@@ -767,13 +764,13 @@ class BPAgent:
                 collected_messages = []
                 try:
                     async for message in self.__run_step(
-                        proc_step,
-                        proc,
-                        step_input,
-                        dispatched_input,
-                        uid,
-                        session_id,
-                        is_spinning,
+                            proc_step,
+                            proc,
+                            step_input,
+                            dispatched_input,
+                            uid,
+                            session_id,
+                            is_spinning,
                     ):
                         if type(message) is tuple:
                             collected_messages.append(message[0])
@@ -783,12 +780,12 @@ class BPAgent:
                             yield message, not proc_step.suppress_output
                 except AttributeError as ae:
                     async for chunk in generate_stream(
-                        f"{ae}. Please check if the file exists."
+                            f"{ae}. Please check if the file exists."
                     ):
                         yield chunk, True
                 except NotImplementedError:
                     async for chunk in generate_stream(
-                        f"\nMalformed process step {proc_step.name}. Please check your expert configuration and try again."
+                            f"\nMalformed process step {proc_step.name}. Please check your expert configuration and try again."
                     ):
                         yield chunk, True
                 except Exception as e:
@@ -827,7 +824,7 @@ class BPAgent:
                     results = await asyncio.gather(*tasks)
                 except AttributeError as ae:
                     async for chunk in generate_stream(
-                        f"{ae}. Please check if the file exists."
+                            f"{ae}. Please check if the file exists."
                     ):
                         yield chunk, True  # FIXME(lucas): Allow canvas output management for parallel steps
 
@@ -867,10 +864,10 @@ class BPAgent:
                         # Uploads step data to S3 data bucket
                         try:
                             if (
-                                data_filename.endswith(".csv")
-                                or data_filename.endswith(".png")
-                                or data_filename.endswith(".jpg")
-                                or data_filename.endswith(".jpeg")
+                                    data_filename.endswith(".csv")
+                                    or data_filename.endswith(".png")
+                                    or data_filename.endswith(".jpg")
+                                    or data_filename.endswith(".jpeg")
                             ):
                                 upload_to_s3(s.data_output_name, step_output.data, uid)
                             else:
@@ -911,7 +908,7 @@ class BPAgent:
                         if step_output.text:
                             step_str += f"{step_output.text}"
                         if step_output.data is not None and not is_base64_image(
-                            step_output.data
+                                step_output.data
                         ):
                             newline_str = ""
                             if len(step_str) > 0:
@@ -943,10 +940,10 @@ class BPAgent:
                             if type(step_output) is LLMResponse:
                                 if step_output.data is not None:
                                     if (
-                                        proc_step.manifest.get("model").get(
-                                            "model_name"
-                                        )
-                                        in image_models
+                                            proc_step.manifest.get("model").get(
+                                                "model_name"
+                                            )
+                                            in image_models
                                     ):
                                         yield step_output.text
                                         yield "\n\n"
@@ -958,11 +955,11 @@ class BPAgent:
                         yield "\n\n"
 
     async def __run_llm_step(
-        self,
-        step_input: Union[str, pd.DataFrame],
-        proc_step: ProcessStep,
-        uid: str,
-        session_id: str = "",
+            self,
+            step_input: Union[str, pd.DataFrame],
+            proc_step: ProcessStep,
+            uid: str,
+            session_id: str = "",
     ) -> AsyncGenerator:
         retry_no = 0
         llm_resp = None
@@ -970,23 +967,40 @@ class BPAgent:
         while retry_no < proc_step.parent.server_config.max_retries and not llm_resp:
             collected_messages = []
             try:
-                async for message in self.process_llm(
-                    question=step_input,
-                    proc_step=proc_step,
-                    uid=uid,
-                    session_id=session_id,
-                    use_alias=False,
-                ):
-                    if type(message) is not FlowLog:
-                        collected_messages.append(message)
-                    yield message
-                llm_resp = "".join(collected_messages)
-                retry_no += 1
+                # FIXME(rakuto): Hack for TNE BigText Model routing. Dispatching to TNE models should be integrated into Slash-GPT.
+                if proc_step.name == "bigtext-arxiv":
+                    endpoint = os.getenv("BIGTEXT_ENDPOINT", "http://localhost:5002/v1")
+                    client = AsyncOpenAI(base_url=endpoint)
+                    stream_response = await client.chat.completions.create(
+                        model="bigtext-arxiv-endor",
+                        messages=[{"role": "user", "content": step_input}],
+                        stream=True,
+                    )
+                    async for chunk in stream_response:
+                        content = chunk.choices[0].delta.content or ""
+                        collected_messages.append(content)
+                        yield content
+
+                    llm_resp = "".join(collected_messages)
+                    retry_no += 1
+                else:
+                    async for message in self.process_llm(
+                            question=step_input,
+                            proc_step=proc_step,
+                            uid=uid,
+                            session_id=session_id,
+                            use_alias=False,
+                    ):
+                        if type(message) is not FlowLog:
+                            collected_messages.append(message)
+                        yield message
+                    llm_resp = "".join(collected_messages)
+                    retry_no += 1
             except Exception as e:
                 raise e
 
     async def __run_rag_step(
-        self, step_input: str, proc_step: ProcessStep, uid: str, session_id: str = ""
+            self, step_input: str, proc_step: ProcessStep, uid: str, session_id: str = ""
     ) -> AsyncGenerator:
         # Create a RagRequest from the step input
         if proc_step.rag_db_name:
@@ -1028,7 +1042,7 @@ class BPAgent:
             rag_start_time = time.time()
             evaluation_texts = {}
             async for rag_response in async_iterate_streaming_request_generator(
-                settings.rag_endpoint, rag_request, on_response, on_error
+                    settings.rag_endpoint, rag_request, on_response, on_error
             ):
                 patch_record = rag_response.patch_record
                 collected_responses.append(patch_record)
@@ -1116,7 +1130,7 @@ class BPAgent:
             raise e
 
     async def __run_semantic_search_step(
-        self, step_input: str, proc_step: ProcessStep, uid: str, session_id: str = ""
+            self, step_input: str, proc_step: ProcessStep, uid: str, session_id: str = ""
     ) -> AsyncGenerator:
         # Create a RagRequest from the step input
         configs = {}
@@ -1157,7 +1171,7 @@ class BPAgent:
                     response_str = ""
                     if ann.similarity:
                         response_str += (
-                            f"**Embedding #{i+1}** (Similarity: {ann.similarity})\n\n"
+                            f"**Embedding #{i + 1}** (Similarity: {ann.similarity})\n\n"
                         )
                     if ann.text:
                         response_str += f"**Text**\n{ann.text}\n\n"
@@ -1190,7 +1204,7 @@ class BPAgent:
             raise e
 
     async def __run_llm_python_code(
-        self, llm_resp, step, step_input, uid, retry_no, session_id
+            self, llm_resp, step, step_input, uid, retry_no, session_id
     ) -> AsyncGenerator:
         """Code interpreter module; allow the LLMs to generate and run Python code on the data within the BP."""
         if type(llm_resp) is list:
@@ -1245,12 +1259,12 @@ class BPAgent:
                     step_input = f"ERROR: {e}\n\nCODE: {code}"
                     collected_messages = []
                     async for message in self.process_llm(
-                        question=step_input,
-                        proc_step=step,
-                        manifest=manifest,
-                        uid=uid,
-                        session_id=session_id,
-                        use_alias=False,
+                            question=step_input,
+                            proc_step=step,
+                            manifest=manifest,
+                            uid=uid,
+                            session_id=session_id,
+                            use_alias=False,
                     ):
                         if type(message) is not FlowLog:
                             collected_messages.append(message)
@@ -1269,17 +1283,17 @@ class BPAgent:
 
                     # Attempt to run the debugged code
                     async for message in self.__run_llm_python_code(
-                        formatted_code,
-                        step,
-                        step_input,
-                        uid,
-                        retry_no + 1,
-                        session_id,
+                            formatted_code,
+                            step,
+                            step_input,
+                            uid,
+                            retry_no + 1,
+                            session_id,
                     ):
                         yield message
 
     async def __run_llm_python_step(
-        self, step_input: str, step: ProcessStep, uid: str, session_id: str = ""
+            self, step_input: str, step: ProcessStep, uid: str, session_id: str = ""
     ) -> AsyncGenerator:
         """Generate and run Python code that operates on DataFrames"""
         # Generate the code
@@ -1290,11 +1304,11 @@ class BPAgent:
         while retry_no < step.parent.server_config.max_retries and not llm_resp:
             collected_messages = []
             async for message in self.process_llm(
-                question=step_input,
-                proc_step=step,
-                uid=uid,
-                session_id=session_id,
-                use_alias=False,
+                    question=step_input,
+                    proc_step=step,
+                    uid=uid,
+                    session_id=session_id,
+                    use_alias=False,
             ):
                 if type(message) is not FlowLog:
                     collected_messages.append(message)
@@ -1312,21 +1326,21 @@ class BPAgent:
         if type(formatted_code) is FlowLog:
             yield formatted_code
         async for message in self.__run_llm_python_code(
-            formatted_code,
-            step,
-            step_input,
-            uid,
-            0,
-            session_id,
+                formatted_code,
+                step,
+                step_input,
+                uid,
+                0,
+                session_id,
         ):
             yield message
 
     async def __run_python_step(
-        self,
-        step_input: Union[str, pd.DataFrame],
-        proc_step: ProcessStep,
-        uid: str,
-        session_id: str = "",
+            self,
+            step_input: Union[str, pd.DataFrame],
+            proc_step: ProcessStep,
+            uid: str,
+            session_id: str = "",
     ) -> Any:
         namespace = {}
         func_name = proc_step.name.split(".")[0]
@@ -1477,9 +1491,9 @@ class BPAgent:
             try:
                 # FIXME(lucas): this is stupid
                 if (
-                    "[" in formatted_res
-                    and "import" not in formatted_res
-                    and "Announcement" not in formatted_res
+                        "[" in formatted_res
+                        and "import" not in formatted_res
+                        and "Announcement" not in formatted_res
                 ):
                     formatted_res = formatted_res.strip("[]").split(",")
                     formatted_res = [i.strip() for i in formatted_res]
