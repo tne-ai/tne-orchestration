@@ -985,19 +985,19 @@ class BPAgent:
 
                             llm_resp = "".join(collected_messages)
                             retry_no += 1
-                else:
-                    async for message in self.process_llm(
-                            question=step_input,
-                            proc_step=proc_step,
-                            uid=uid,
-                            session_id=session_id,
-                            use_alias=False,
-                    ):
-                        if type(message) is not FlowLog:
-                            collected_messages.append(message)
-                        yield message
-                    llm_resp = "".join(collected_messages)
-                    retry_no += 1
+                        else:
+                            async for message in self.process_llm(
+                                    question=step_input,
+                                    proc_step=proc_step,
+                                    uid=uid,
+                                    session_id=session_id,
+                                    use_alias=False,
+                            ):
+                                if type(message) is not FlowLog:
+                                    collected_messages.append(message)
+                                yield message
+                            llm_resp = "".join(collected_messages)
+                            retry_no += 1
             except Exception as e:
                 raise e
 
