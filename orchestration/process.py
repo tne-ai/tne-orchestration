@@ -968,21 +968,23 @@ class BPAgent:
             collected_messages = []
             try:
                 # FIXME(rakuto): Hack for TNE BigText Model routing. Dispatching to TNE models should be integrated into Slash-GPT.
-                if proc_step.name == "bigtext-arxiv":
-                    endpoint = os.getenv("BIGTEXT_ENDPOINT", "http://localhost:5002/v1")
-                    client = AsyncOpenAI(base_url=endpoint)
-                    stream_response = await client.chat.completions.create(
-                        model="bigtext-arxiv-endor",
-                        messages=[{"role": "user", "content": step_input}],
-                        stream=True,
-                    )
-                    async for chunk in stream_response:
-                        content = chunk.choices[0].delta.content or ""
-                        collected_messages.append(content)
-                        yield content
+                if proc_step.manifest:
+                    if proc_step.manifest.get("model"):
+                        if proc_step.manifest.get("model").get("model_name") == "tne-bigtext-arxiv":
+                            endpoint = os.getenv("BIGTEXT_ENDPOINT", "http://localhost:5002/v1")
+                            client = AsyncOpenAI(base_url=endpoint)
+                            stream_response = await client.chat.completions.create(
+                                model="bigtext-arxiv-endor",
+                                messages=[{"role": "user", "content": step_input}],
+                                stream=True,
+                            )
+                            async for chunk in stream_response:
+                                content = chunk.choices[0].delta.content or ""
+                                collected_messages.append(content)
+                                yield content
 
-                    llm_resp = "".join(collected_messages)
-                    retry_no += 1
+                            llm_resp = "".join(collected_messages)
+                            retry_no += 1
                 else:
                     async for message in self.process_llm(
                             question=step_input,
