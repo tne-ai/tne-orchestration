@@ -600,7 +600,8 @@ class BPAgent:
                         if proc_name == "Highlighter Chat":
                             user_proc = get_s3_proc(proc_name, "SYSTEM")
                             show_description = False
-                        user_proc = get_s3_proc(proc_name, uid)
+                        else:
+                            user_proc = get_s3_proc(proc_name, uid)
                     except Exception as e:
                         aws_token_error = True
                         async for chunk in generate_stream(
