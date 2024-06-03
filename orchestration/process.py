@@ -462,12 +462,7 @@ class BPAgent:
                         try:
                             df_data = StringIO(data)
                             df = pd.read_csv(df_data)
-                            data_str = (
-                                    f"{data_source}: "
-                                    + ", ".join(df.columns.tolist())
-                                    + f"\n{data_source} sample rows: "
-                                    + f"{df.head(3).to_json()}"
-                            )
+                            data_str = df.to_string()
                         except Exception as e:
                             raise ValueError(
                                 f"Got error {e} while attempting to load dataframe."
@@ -488,7 +483,14 @@ class BPAgent:
                         else:
                             manifest["images"] = [proc_step.data.get(data_source)]
                     else:
-                        data_str = f"FILENAME: {data_source}\n\n{proc_step.data.get(data_source)}"
+                        curr_data = proc_step.data.get(data_source)
+                        if type(curr_data) is str:
+                            data_str = f"FILENAME: {data_source}\n\n{curr_data}"
+                        elif type(curr_data is pd.DataFrame):
+                            data_str = f"FILENAME: {data_source}\n\n{curr_data.to_string()}"
+                        else:
+                            data_str = ""
+
                         data_schemas.append(data_str)
 
             manifest["prompt"] = "\n".join(data_schemas) + f"\n{manifest['prompt']}"
@@ -973,6 +975,10 @@ class BPAgent:
     ) -> AsyncGenerator:
         retry_no = 0
         llm_resp = None
+
+        if proc_step.data:
+            if type(proc_step.data) is pd.DataFrame:
+                step_input = f"{proc_step.data.to_string()}\n\n{step_input}"
 
         while retry_no < proc_step.parent.server_config.max_retries and not llm_resp:
             collected_messages = []
