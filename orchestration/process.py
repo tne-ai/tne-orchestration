@@ -161,6 +161,7 @@ class BPAgent:
             uid,
             session_id,
             is_spinning,
+            show_description = True,
     ) -> AsyncGenerator:
         # TEMPORARY: route all tne-branded models to groq
         if proc_step.manifest:
@@ -180,8 +181,9 @@ class BPAgent:
             else:
                 step_input = proc_step.input
 
-        yield f"**{proc_step.description}**", True
-        yield "\n\n", True
+        if show_description:
+            yield f"**{proc_step.description}**", True
+            yield "\n\n", True
 
         step_output = LLMResponse()
 
@@ -584,6 +586,7 @@ class BPAgent:
         )
 
         user_proc = None
+        show_description = True
         try:
             # Override AI question dispatcher with dot-slash syntax
             try:
@@ -594,6 +597,9 @@ class BPAgent:
                         user_question = question.split("--")[1].strip()
                         question = user_question
                     try:
+                        if proc_name == "Highlighter Chat":
+                            user_proc = get_s3_proc(proc_name, "SYSTEM")
+                            show_description = False
                         user_proc = get_s3_proc(proc_name, uid)
                     except Exception as e:
                         aws_token_error = True
@@ -689,6 +695,7 @@ class BPAgent:
                             user_proc,
                             uid,
                             session_id=session_id,
+                            show_description=show_description
                     ):
                         if type(message) is tuple:
                             if (
@@ -718,6 +725,7 @@ class BPAgent:
             is_sub_proc: bool = False,
             step_no: int = 0,
             session_id: str = "",
+            show_description: bool = True,
     ) -> AsyncGenerator:
         self.orig_question = question
         step_input = question
@@ -771,6 +779,7 @@ class BPAgent:
                             uid,
                             session_id,
                             is_spinning,
+                            show_description
                     ):
                         if type(message) is tuple:
                             collected_messages.append(message[0])
