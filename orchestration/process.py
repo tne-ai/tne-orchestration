@@ -451,47 +451,39 @@ class BPAgent:
 
         if sources and sources[0] != "none":
             for data_source in sources:
-                data_source = data_source.strip()
+                data = proc_step.data.get(data_source)
+                if type(data) is dict:
+                    data = data.get('data')
 
-                # Pull data in from the parent to this step
-                if data_source in proc_step.parent.data.keys():
-                    data = proc_step.parent.data.get(data_source).get("data")
+                # CSV file
+                if type(data) is StringIO:
+                    try:
+                        df_data = StringIO(data)
+                        df = pd.read_csv(df_data)
+                        data_str = f"FILENAME: {data_source}\n\n{df.to_string()}"
+                    except Exception as e:
+                        raise ValueError(
+                            f"Got error {e} while attempting to load dataframe."
+                        )
 
-                    # CSV file
-                    if type(data) is StringIO:
-                        try:
-                            df_data = StringIO(data)
-                            df = pd.read_csv(df_data)
-                            data_str = df.to_string()
-                        except Exception as e:
-                            raise ValueError(
-                                f"Got error {e} while attempting to load dataframe."
-                            )
+                # Text file
+                elif type(data) is str:
+                    data_str = f"FILENAME: {data_source}\n\n{data}"
 
-                    # Text file
-                    elif type(data) is str:
-                        data_str = data
-                    else:
-                        raise NotImplementedError("Unsupported data type in workflow.")
-                    data_schemas.append(data_str)
+                # DataFrame
+                elif type(data) is pd.DataFrame:
+                    data_str = f"FILENAME: {data_source}\n\n{data.to_string()}"
+
                 else:
-                    # Update parent with this step's data
-                    proc_step.parent.data.update({data_source: proc_step.data})
-                    if is_base64_image(proc_step.data.get(data_source)):
-                        if manifest.get("images"):
-                            manifest["images"].append(proc_step.data.get(data_source))
-                        else:
-                            manifest["images"] = [proc_step.data.get(data_source)]
-                    else:
-                        curr_data = proc_step.data.get(data_source)
-                        if type(curr_data) is str:
-                            data_str = f"FILENAME: {data_source}\n\n{curr_data}"
-                        elif type(curr_data is pd.DataFrame):
-                            data_str = f"FILENAME: {data_source}\n\n{curr_data.to_string()}"
-                        else:
-                            data_str = ""
+                    raise NotImplementedError(f"Unsupported data type {type(data)}")
 
-                        data_schemas.append(data_str)
+                if is_base64_image(proc_step.data.get(data_source)):
+                    if manifest.get("images"):
+                        manifest["images"].append(proc_step.data.get(data_source))
+                    else:
+                        manifest["images"] = [proc_step.data.get(data_source)]
+
+                data_schemas.append(data_str)
 
             manifest["prompt"] = "\n".join(data_schemas) + f"\n{manifest['prompt']}"
 
@@ -899,7 +891,7 @@ class BPAgent:
                 if proc_step.output_type == "augment_prompt":
                     # Add the step output to the prompt
                     step_str = ""
-                    if step_output.text:
+                    if step_output.text is not None:
                         step_str += f"\n\n{step_output.text}"
                     if step_output.data is not None:
                         newline_str = ""
@@ -975,10 +967,6 @@ class BPAgent:
     ) -> AsyncGenerator:
         retry_no = 0
         llm_resp = None
-
-        if proc_step.data:
-            if type(proc_step.data) is pd.DataFrame:
-                step_input = f"{proc_step.data.to_string()}\n\n{step_input}"
 
         while retry_no < proc_step.parent.server_config.max_retries and not llm_resp:
             collected_messages = []
