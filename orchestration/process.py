@@ -1512,6 +1512,7 @@ class BPAgent:
                         "[" in formatted_res
                         and "import" not in formatted_res
                         and "Announcement" not in formatted_res
+                        and "json" not in formatted_res
                 ):
                     formatted_res = formatted_res.strip("[]").split(",")
                     formatted_res = [i.strip() for i in formatted_res]
