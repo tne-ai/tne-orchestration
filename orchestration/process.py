@@ -591,11 +591,9 @@ class BPAgent:
                         user_question = question.split("--")[1].strip()
                         question = user_question
                     try:
-                        if proc_name == "Highlighter Chat":
-                            user_proc = get_s3_proc(proc_name, "SYSTEM")
+                        if uid == "SYSTEM":
                             show_description = False
-                        else:
-                            user_proc = get_s3_proc(proc_name, uid)
+                        user_proc = get_s3_proc(proc_name, uid)
                     except Exception as e:
                         aws_token_error = True
                         async for chunk in generate_stream(
