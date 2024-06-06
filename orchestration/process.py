@@ -4,6 +4,7 @@ import copy
 import inspect
 # Temporary function call workarounds to be incorporated into SlashGPT
 import json
+import logging
 import os
 import platform
 import re
@@ -11,9 +12,12 @@ import time
 from io import StringIO
 from typing import Any, Dict, Union, Optional, AsyncGenerator
 
+import boto3
+import orjson
 import pandas as pd
 import requests
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError
+from mypy_boto3_sagemaker_runtime.client import SageMakerRuntimeClient
 from openai import AsyncOpenAI
 from orchestration.bp import BP, ProcessStep
 from orchestration.server_utils import (
@@ -30,6 +34,7 @@ from orchestration.server_utils import (
 )
 from orchestration.settings import settings
 from orchestration.v2.api.api import RagResponse
+from orchestration.v2.api.line_iterator import LineIterator
 from orchestration.v2.api.util import (
     async_iterate_streaming_request_generator,
     anns_request_to_json_str,
@@ -44,9 +49,13 @@ import krt
 # Uncomment below to use local SlashGPT
 # sys.path.append(os.path.join(os.path.dirname(__file__), "../../SlashTNE/src"))
 
+logger = logging.getLogger(__name__)
+
 # Literal constants
 BUCKET_NAME = settings.user_artifact_bucket
 image_models = ["dall-e-3"]
+
+smr_runtime = boto3.client("sagemaker-runtime")  # type: SageMakerRuntimeClient
 
 if platform.system() == "Darwin":
     # So that input can handle Kanji & delete
@@ -161,7 +170,7 @@ class BPAgent:
             uid,
             session_id,
             is_spinning,
-            show_description = True,
+            show_description=True,
     ) -> AsyncGenerator:
         # TEMPORARY: route all tne-branded models to groq
         if proc_step.manifest:
@@ -972,21 +981,60 @@ class BPAgent:
                 # FIXME(rakuto): Hack for TNE BigText Model routing. Dispatching to TNE models should be integrated into Slash-GPT.
                 if proc_step.manifest:
                     if proc_step.manifest.get("model"):
+                        model = proc_step.manifest.get("model")
+                        model_name = model.get("model_name")
                         if proc_step.manifest.get("model").get("model_name") == "tne-bigtext-arxiv":
                             endpoint = os.getenv("BIGTEXT_ENDPOINT", "http://localhost:5002/v1")
                             client = AsyncOpenAI(base_url=endpoint)
-                            stream_response = await client.chat.completions.create(
+                            event_stream = await client.chat.completions.create(
                                 model="bigtext-arxiv-endor",
                                 messages=[{"role": "user", "content": step_input}],
                                 stream=True,
                             )
-                            async for chunk in stream_response:
-                                content = chunk.choices[0].delta.content or ""
+                            async for event in event_stream:
+                                content = event.choices[0].delta.content or ""
                                 collected_messages.append(content)
                                 yield content
 
                             llm_resp = "".join(collected_messages)
                             retry_no += 1
+                        elif proc_step.manifest.get("model").get("engine_name") == "sagemaker":
+                            if model_name == "Phi-3-mini-128k-instruct":
+                                endpoint = os.getenv("TNE_PHI3_MINI_128K_INSTRUCT_ENDPOINT", None)
+                                assert endpoint is not None, "TNE_PHI3_MINI_128K_INSTRUCT_ENDPOINT must be set"
+
+                                response_stream = smr_runtime.invoke_endpoint_with_response_stream(
+                                    EndpointName=endpoint,
+                                    Body=orjson.dumps({
+                                        "model": "tgi",
+                                        "messages": [
+                                            {"role": "user", "content": step_input},
+                                        ],
+                                        "temperature": model.get("temperature", 0),
+                                        "max_tokens": model.get("max_tokens", 500),
+                                        "do_sample": False,
+                                        "stream": True,
+                                    }),
+                                    ContentType="application/json",
+                                )
+                                event_stream = response_stream['Body']
+                                for line in LineIterator(event_stream):
+                                    line = line.decode('utf-8').replace("data:", '')
+                                    if len(line) > 0:
+                                        try:
+                                            delta = orjson.loads(line)['choices'][0]['delta']
+                                            if 'content' in delta:
+                                                content = delta['content']
+                                                content = content.replace('<|end|>', '')
+                                                collected_messages.append(content)
+                                                yield content
+                                        except orjson.JSONDecodeError as e:
+                                            logger.exception(e)
+
+                                llm_resp = "".join(collected_messages)
+                                retry_no += 1
+                            else:
+                                raise ValueError(f"unknown model: {model}")
                         else:
                             async for message in self.process_llm(
                                     question=step_input,
