@@ -49,6 +49,7 @@ pydantic-settings
 black
 termcolor==2.4.0
 kubernetes_asyncio
+boto3-stubs[sagemaker-runtime]
 
 # General opentelemetry dependencies.
 opentelemetry-distro[otlp]==0.44b0
