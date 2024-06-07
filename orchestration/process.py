@@ -1003,16 +1003,18 @@ class BPAgent:
 
                             llm_resp = "".join(collected_messages)
                             retry_no += 1
-                        elif proc_step.manifest.get("model").get("engine_name") == "sagemaker":
+                        elif model_name in _SAGEMAKER_ENDPOINT.keys():
                             endpoint = _SAGEMAKER_ENDPOINT.get(model_name, None)
                             if endpoint is None:
                                 raise RuntimeError("unsupported SageMaker model: {}".format(model_name))
                             else:
+                                prompt = proc_step.manifest['prompt'].strip()
                                 response_stream = smr_runtime.invoke_endpoint_with_response_stream(
                                     EndpointName=endpoint,
                                     Body=orjson.dumps({
                                         "model": "tgi",
                                         "messages": [
+                                            {"role": "system", "content": prompt},
                                             {"role": "user", "content": step_input},
                                         ],
                                         "temperature": model.get("temperature", 0),
@@ -1030,9 +1032,10 @@ class BPAgent:
                                             delta = orjson.loads(line)['choices'][0]['delta']
                                             if 'content' in delta:
                                                 content = delta['content']
-                                                content = content.replace('<|end|>', '')
-                                                collected_messages.append(content)
+                                                collected_messages.append(content.replace('<|end|>', ''))
                                                 yield content
+                                                if '<|end|>' in content:
+                                                    break
                                         except orjson.JSONDecodeError as e:
                                             logger.exception(e)
 
