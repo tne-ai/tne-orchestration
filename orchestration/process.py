@@ -1038,8 +1038,6 @@ class BPAgent:
 
                                 llm_resp = "".join(collected_messages)
                                 retry_no += 1
-                            else:
-                                raise ValueError(f"unknown model: {model}")
                         else:
                             async for message in self.process_llm(
                                     question=step_input,
