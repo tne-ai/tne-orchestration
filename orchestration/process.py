@@ -57,6 +57,11 @@ image_models = ["dall-e-3"]
 
 smr_runtime = boto3.client("sagemaker-runtime")  # type: SageMakerRuntimeClient
 
+_SAGEMAKER_ENDPOINT = {
+    "Phi-3-mini-128k-instruct": os.getenv("TNE_PHI3_MINI_128K_INSTRUCT_ENDPOINT"),
+    "Phi-3-mini-4k-insqa": os.getenv("TNE_PHI3_MINI_4K_INSQA"),
+}
+
 if platform.system() == "Darwin":
     # So that input can handle Kanji & delete
     import readline  # noqa: F401
@@ -999,10 +1004,10 @@ class BPAgent:
                             llm_resp = "".join(collected_messages)
                             retry_no += 1
                         elif proc_step.manifest.get("model").get("engine_name") == "sagemaker":
-                            if model_name == "Phi-3-mini-128k-instruct":
-                                endpoint = os.getenv("TNE_PHI3_MINI_128K_INSTRUCT_ENDPOINT", None)
-                                assert endpoint is not None, "TNE_PHI3_MINI_128K_INSTRUCT_ENDPOINT must be set"
-
+                            endpoint = _SAGEMAKER_ENDPOINT.get(model_name, None)
+                            if endpoint is None:
+                                raise RuntimeError("unsupported SageMaker model: {}".format(model_name))
+                            else:
                                 response_stream = smr_runtime.invoke_endpoint_with_response_stream(
                                     EndpointName=endpoint,
                                     Body=orjson.dumps({
