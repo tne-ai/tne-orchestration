@@ -1014,12 +1014,12 @@ class BPAgent:
                                     Body=orjson.dumps({
                                         "model": "tgi",
                                         "messages": [
-                                            {"role": "system", "content": prompt},
                                             {"role": "user", "content": step_input},
                                         ],
                                         "temperature": model.get("temperature", 0),
                                         "max_tokens": model.get("max_tokens", 500),
-                                        "do_sample": False,
+                                        "do_sample": True,
+                                        "top_p": 0.95,
                                         "stream": True,
                                     }),
                                     ContentType="application/json",
