@@ -57,6 +57,11 @@ image_models = ["dall-e-3"]
 
 smr_runtime = boto3.client("sagemaker-runtime")  # type: SageMakerRuntimeClient
 
+_SAGEMAKER_ENDPOINT = {
+    "Phi-3-mini-128k-instruct": os.getenv("TNE_PHI3_MINI_128K_INSTRUCT_ENDPOINT"),
+    "Phi-3-mini-4k-insqa": os.getenv("TNE_PHI3_MINI_4K_INSQA"),
+}
+
 if platform.system() == "Darwin":
     # So that input can handle Kanji & delete
     import readline  # noqa: F401
@@ -998,11 +1003,12 @@ class BPAgent:
 
                             llm_resp = "".join(collected_messages)
                             retry_no += 1
-                        elif proc_step.manifest.get("model").get("engine_name") == "sagemaker":
-                            if model_name == "Phi-3-mini-128k-instruct":
-                                endpoint = os.getenv("TNE_PHI3_MINI_128K_INSTRUCT_ENDPOINT", None)
-                                assert endpoint is not None, "TNE_PHI3_MINI_128K_INSTRUCT_ENDPOINT must be set"
-
+                        elif model_name in _SAGEMAKER_ENDPOINT.keys():
+                            endpoint = _SAGEMAKER_ENDPOINT.get(model_name, None)
+                            if endpoint is None:
+                                raise RuntimeError("unsupported SageMaker model: {}".format(model_name))
+                            else:
+                                prompt = proc_step.manifest['prompt'].strip()
                                 response_stream = smr_runtime.invoke_endpoint_with_response_stream(
                                     EndpointName=endpoint,
                                     Body=orjson.dumps({
@@ -1010,9 +1016,10 @@ class BPAgent:
                                         "messages": [
                                             {"role": "user", "content": step_input},
                                         ],
-                                        "temperature": model.get("temperature", 0),
+                                        # "temperature": model.get("temperature", 0),
                                         "max_tokens": model.get("max_tokens", 500),
-                                        "do_sample": False,
+                                        "do_sample": True,
+                                        "top_p": 0.95,
                                         "stream": True,
                                     }),
                                     ContentType="application/json",
@@ -1025,16 +1032,15 @@ class BPAgent:
                                             delta = orjson.loads(line)['choices'][0]['delta']
                                             if 'content' in delta:
                                                 content = delta['content']
-                                                content = content.replace('<|end|>', '')
-                                                collected_messages.append(content)
+                                                collected_messages.append(content.replace('<|end|>', ''))
                                                 yield content
+                                                if '<|end|>' in content:
+                                                    break
                                         except orjson.JSONDecodeError as e:
                                             logger.exception(e)
 
                                 llm_resp = "".join(collected_messages)
                                 retry_no += 1
-                            else:
-                                raise ValueError(f"unknown model: {model}")
                         else:
                             async for message in self.process_llm(
                                     question=step_input,
