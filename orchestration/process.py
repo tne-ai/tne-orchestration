@@ -1016,7 +1016,7 @@ class BPAgent:
                                         "messages": [
                                             {"role": "user", "content": step_input},
                                         ],
-                                        "temperature": model.get("temperature", 0),
+                                        # "temperature": model.get("temperature", 0),
                                         "max_tokens": model.get("max_tokens", 500),
                                         "do_sample": True,
                                         "top_p": 0.95,
