@@ -617,6 +617,9 @@ def __get_step_io_data(incoming_nodes, child_nodes, nodes):
                 )
             else:
                 data_sources.append(incoming_node.get("data").get("dbName"))
+        ##
+        # Legacy data source types
+        ##
         elif incoming_node.get("type") == "csv":
             data_name = incoming_node.get("data").get("csvFile")
             data_sources.append(f"{data_name}.csv")
@@ -627,6 +630,13 @@ def __get_step_io_data(incoming_nodes, child_nodes, nodes):
             step_input = incoming_node.get("data").get("input")
         elif incoming_node.get("type") == "image":
             data_name = f"{incoming_node.get('data').get('imageFile')}"
+            data_sources.append(data_name)
+
+        ##
+        # Now all these are rolled into file, but keeping for backwards compatibility
+        ##
+        elif incoming_node.get("type") == "file":
+            data_name = f"{incoming_node.get('data').get('fileName')}"
             data_sources.append(data_name)
 
     # Targets of the current node
