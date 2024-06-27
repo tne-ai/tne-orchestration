@@ -255,6 +255,8 @@ class ProcessStep:
         self.module = None
         if self.type == "python":
             self.module = proc_step.get("module")
+        if self.type == "python_code":
+            self.module = proc_step.get("module")
 
         # Data config
         if self.data_sources and self.data_sources[0] is not None:

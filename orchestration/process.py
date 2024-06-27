@@ -8,7 +8,9 @@ import logging
 import os
 import platform
 import re
+import sys
 import time
+import subprocess
 from io import StringIO
 from typing import Any, Dict, Union, Optional, AsyncGenerator
 
@@ -27,6 +29,7 @@ from orchestration.server_utils import (
     get_s3_ls,
     get_s3_dir_summary,
     get_python_s3_module,
+    fetch_python_module,
     upload_to_s3,
     parse_s3_proc_data_no_regex,
     is_base64_image,
@@ -324,7 +327,7 @@ class BPAgent:
                 elif type(formatted_output) is str or type(formatted_output) is list:
                     step_output.text = formatted_output
 
-        # Run Python code and may return text or data
+        # Run Python code and may return text or data - DEPRECATED
         elif proc_step.type == "python":
             python_step_resp = None
             try:
@@ -373,6 +376,13 @@ class BPAgent:
                 yield "\n\n"
             else:
                 raise NotImplementedError
+
+        elif proc_step.type == "python_code":
+            python_step_resp = None
+            try:
+                python_step_resp = await self.__run_python_code(step_input, proc_step, uid)
+            except Exception as e:
+                raise e
 
         # Generate + run Python code
         elif proc_step.type == "llm-python":
@@ -1434,6 +1444,32 @@ class BPAgent:
                 session_id,
         ):
             yield message
+
+    async def __run_python_code(
+            self,
+            step_input: Union[str, pd.DataFrame],
+            proc_step: ProcessStep,
+            uid: str,
+            session_id: str = "",
+    ) -> Any:
+        module_name, module_code = fetch_python_module(proc_step.name, uid)
+
+        # Redirect stdout to local buffer
+        namespace = {}
+        stdout = sys.stdout
+        sys.stdout = string_buffer = StringIO()
+        tne_package_path = "../bp-runner/extern/verve/dist/tne-0.0.1-py3-none-any.whl"
+
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", tne_package_path])
+        except subprocess.CalledProcessError as e:
+            return {'error': str(e)}
+
+        try:
+            exec(f'__name__ = "__main__"\n{module_code}', {}, namespace)
+            output = string_buffer.getvalue()
+        finally:
+            sys.stdout = stdout
 
     async def __run_python_step(
             self,

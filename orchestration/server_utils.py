@@ -34,7 +34,7 @@ PROC_DIR = "proc"
 AGENT_DIR = "manifests"
 CODE_DIR = "modules"
 DATA_DIR = "data"
-OPERATOR_NODES = ["llm", "proc", "python", "rag", "semantic"]
+OPERATOR_NODES = ["llm", "proc", "python", "python_code", "rag", "semantic"]
 
 # RAG literals
 RAG_DB_HOST = "postgresql-ebp.cfwmuvh4blso.us-west-2.rds.amazonaws.com"
@@ -239,6 +239,33 @@ def get_python_s3_module(module_name, uid):
 
     return None
 
+
+def fetch_python_module(module_name, uid):
+    """Load Python code from S3"""
+    try:
+        s3 = boto3.client("s3")
+        python_s3_path = f"d/{uid}/{CODE_DIR}"
+        bucket_contents = s3.list_objects(Bucket=BUCKET_NAME, Prefix=python_s3_path)[
+            "Contents"
+        ]
+
+        # Load processes from S3
+        for obj in bucket_contents:
+            basename = obj.get("Key").split("/")[-1]
+            if basename == module_name:
+                file_content = (
+                    s3.get_object(Bucket=BUCKET_NAME, Key=obj["Key"])["Body"]
+                    .read()
+                    .decode("utf-8")
+                )
+                return basename, file_content
+
+    except (NoCredentialsError, PartialCredentialsError) as e:
+        raise e
+    except Exception as e:
+        raise e
+
+    return None
 
 def upload_to_s3(file_name, data, uid) -> str:
     """Upload an object to S3"""
@@ -536,7 +563,7 @@ def __construct_step_dict(
         else:
             return step_dict
 
-    # Code node
+    # Code node - DEPRECATED, but kept here for backwards legacy compatibility
     elif node.get("type") == "python":
         kwargs = {}
         graph_kwargs = node.get("data").get("kwargs")
@@ -560,6 +587,23 @@ def __construct_step_dict(
             step_dict["data_output_name"] = data_output_name
         if sql_queries:
             step_dict["sql_queries"] = sql_queries
+
+        return step_dict
+
+    # Code node
+    elif node.get("type") == "python_code":
+
+        step_dict = {
+            "name": node.get("data").get("module"),
+            "type": "python_code",
+            "description": node.get("data").get("title"),
+            "output_type": node.get("data").get("outputType"),
+            "suppress_output": node.get("data").get("outputToCanvas"),
+            "input": step_input,
+        }
+
+        if data_output_name:
+            step_dict["data_output_name"] = data_output_name
 
         return step_dict
 
