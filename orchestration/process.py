@@ -15,14 +15,12 @@ from io import StringIO
 from typing import Any, Dict, Union, Optional, AsyncGenerator
 
 import boto3
-import orjson
 import pandas as pd
 import requests
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError
 from mypy_boto3_sagemaker_runtime.client import SageMakerRuntimeClient
 from openai import AsyncOpenAI
 from orchestration.bp import BP, ProcessStep
-from orchestration.chat_template import apply_chat_template
 from orchestration.server_utils import (
     generate_stream,
     get_s3_proc,
@@ -37,7 +35,6 @@ from orchestration.server_utils import (
     create_anns_request,
 )
 from orchestration.settings import settings
-from orchestration.utils import Phi3LineIterator, LlamaLineIterator
 from orchestration.v2.api.api import RagResponse
 from orchestration.v2.api.util import (
     async_iterate_streaming_request_generator,
@@ -62,8 +59,8 @@ BUCKET_NAME = settings.user_artifact_bucket
 TNE_PACKAGE_PATH = "../bp-runner/extern/verve/dist/tne-0.0.1-py3-none-any.whl"
 image_models = ["dall-e-3"]
 
-# List of models served over SageMaker LMI
-_LMI_MODELS = {
+# List of self-hosted models served over SageMaker endpoint
+_SAGEMAKER_MODELS = {
     "Llama-3-70B-Instruct": os.getenv("TNE_LLAMA_3_70B_INSTRUCT_ENDPOINT", "")
 }
 DATA_BUFFER_LENGTH = 2500
@@ -1082,84 +1079,33 @@ class BPAgent:
                             llm_resp = "".join(collected_messages)
                             retry_no += 1
                         elif proc_step.manifest.get("model").get("engine_name") == "sagemaker" \
-                                or model_name in _LMI_MODELS.keys():  # TODO(rakuto): Workaround since engineName is hardcoded to `groq` in ManifestEditor.tsx
-                            # SageMaker LMI endpoint
-                            if model_name in _LMI_MODELS.keys():
-                                endpoint = _LMI_MODELS.get(model_name, None)
-                                if endpoint is None:
-                                    raise ValueError(f"unknown model: {model}")
+                                or model_name in _SAGEMAKER_MODELS.keys():  # TODO(rakuto): Workaround since engineName is hardcoded to `groq` in ManifestEditor.tsx
 
-                                messages = []
-                                system_prompt = proc_step.manifest.get('prompt', '')
-                                if len(system_prompt) > 0:
-                                    messages.append({"role": "system", "content": system_prompt})
-                                messages.append({"role": "user", "content": step_input})
-                                prompt = apply_chat_template(model_name, messages)
+                            messages = []
+                            system_prompt = proc_step.manifest.get('prompt', '')
+                            if len(system_prompt) > 0:
+                                messages.append({"role": "system", "content": system_prompt})
+                            messages.append({"role": "user", "content": step_input})
 
-                                response_stream = smr_client.invoke_endpoint_with_response_stream(
-                                    EndpointName=endpoint,
-                                    Body=orjson.dumps(dict(
-                                        inputs=prompt,
-                                        parameters=dict(
-                                            max_new_tokens=proc_step.manifest.get("max_tokens", 500),
-                                            temperature=proc_step.manifest.get("temperature", 0),
-                                            top_p=proc_step.manifest.get("top_p", 0.95),
-                                            do_sample=True,
-                                        )
-                                    )),
-                                    ContentType="application/json",
-                                )
+                            openai = AsyncOpenAI(base_url=os.getenv("SAGEMAKER_MESSAGE_API_ENDPOINT",
+                                                                    "https://chatapi.app.tne.ai") + "/v1")
+                            stream_response = await openai.chat.completions.create(
+                                model=model_name,
+                                messages=messages,
+                                stream=True,
+                                max_tokens=proc_step.manifest.get("max_tokens", None),
+                                temperature=proc_step.manifest.get("temperature", 0),
+                                top_p=proc_step.manifest.get("top_p", None),
+                            )
 
-                                event_stream = response_stream['Body']
-                                for chunk in LlamaLineIterator(event_stream):
-                                    stop_pos = chunk.find("<|eot_id|>")
-                                    if stop_pos != -1:
-                                        chunk = chunk[0:stop_pos]
-                                    yield chunk
-                                    collected_messages.append(chunk)
-                                    if stop_pos != -1:
-                                        break
-
-                                llm_resp = "".join(collected_messages)
-                                retry_no += 1
-
-                            elif model_name == "Phi-3-mini-128k-instruct":
-                                # SageMaker TGI endpoint
-                                endpoint = os.getenv("TNE_PHI3_MINI_128K_INSTRUCT_ENDPOINT", None)
-                                assert endpoint is not None, "TNE_PHI3_MINI_128K_INSTRUCT_ENDPOINT must be set"
-
-                                response_stream = smr_client.invoke_endpoint_with_response_stream(
-                                    EndpointName=endpoint,
-                                    Body=orjson.dumps({
-                                        "model": "tgi",
-                                        "messages": [
-                                            {"role": "user", "content": step_input},
-                                        ],
-                                        "temperature": model.get("temperature", 0),
-                                        "max_tokens": model.get("max_tokens", 500),
-                                        "do_sample": False,
-                                        "stream": True,
-                                    }),
-                                    ContentType="application/json",
-                                )
-                                event_stream = response_stream['Body']
-                                for line in Phi3LineIterator(event_stream):
-                                    line = line.decode('utf-8').replace("data:", '')
-                                    if len(line) > 0:
-                                        try:
-                                            delta = orjson.loads(line)['choices'][0]['delta']
-                                            if 'content' in delta:
-                                                content = delta['content']
-                                                content = content.replace('<|end|>', '')
-                                                collected_messages.append(content)
-                                                yield content
-                                        except orjson.JSONDecodeError as e:
-                                            logger.exception(e)
-
-                                llm_resp = "".join(collected_messages)
-                                retry_no += 1
-                            else:
-                                raise ValueError(f"unknown model: {model}")
+                            async for chunk in stream_response:
+                                if chunk.choices[0].finish_reason is None:
+                                    content = chunk.choices[0].delta.content
+                                    yield content
+                                    collected_messages.append(content)
+                                else:
+                                    llm_resp = "".join(collected_messages)
+                                    retry_no += 1
                         else:
                             async for message in self.process_llm(
                                     question=step_input,
