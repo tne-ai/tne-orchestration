@@ -34,7 +34,7 @@ PROC_DIR = "proc"
 AGENT_DIR = "manifests"
 CODE_DIR = "modules"
 DATA_DIR = "data"
-OPERATOR_NODES = ["llm", "proc", "python", "python_code", "rag", "semantic"]
+OPERATOR_NODES = ["llm", "proc", "python", "python_code", "code_generation", "rag", "semantic"]
 
 # RAG literals
 RAG_DB_HOST = "postgresql-ebp.cfwmuvh4blso.us-west-2.rds.amazonaws.com"
@@ -567,10 +567,11 @@ def __construct_step_dict(
     elif node.get("type") == "python":
         kwargs = {}
         graph_kwargs = node.get("data").get("kwargs")
-        if len(graph_kwargs) > 0:
-            for line in graph_kwargs.split("\n"):
-                kwarg, value = line.split(":")
-                kwargs[kwarg.strip()] = value.strip()
+        if graph_kwargs:
+            if len(graph_kwargs) > 0:
+                for line in graph_kwargs.split("\n"):
+                    kwarg, value = line.split(":")
+                    kwargs[kwarg.strip()] = value.strip()
 
         step_dict = {
             "name": node.get("data").get("module"),
@@ -599,6 +600,24 @@ def __construct_step_dict(
             "description": node.get("data").get("title"),
             "output_type": node.get("data").get("outputType"),
             "suppress_output": node.get("data").get("outputToCanvas"),
+            "input": step_input,
+        }
+
+        if data_output_name:
+            step_dict["data_output_name"] = data_output_name
+
+        return step_dict
+
+    # Code node
+    elif node.get("type") == "code_generation":
+
+        step_dict = {
+            "type": "code_generation",
+            "description": node.get("data").get("title"),
+            "prompt": node.get("data").get("prompt"),
+            "output_type": node.get("data").get("outputType"),
+            "suppress_output": node.get("data").get("outputToCanvas"),
+            "data_sources": data_sources,
             "input": step_input,
         }
 
@@ -713,6 +732,7 @@ def parse_graph(file_name, graph):
 
     if len(start_ids) == 0:
         return None
+
 
     start_id = start_ids[0]
     visited = set()

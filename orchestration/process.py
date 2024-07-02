@@ -50,6 +50,8 @@ from tabulate import tabulate
 
 import krt
 
+sys.path.append(os.path.join(os.path.dirname(__file__), "../../verve/"))
+from tne.TNE import TNE
 # Uncomment below to use local SlashGPT
 # sys.path.append(os.path.join(os.path.dirname(__file__), "../../SlashTNE/src"))
 
@@ -57,12 +59,14 @@ logger = logging.getLogger(__name__)
 
 # Literal constants
 BUCKET_NAME = settings.user_artifact_bucket
+TNE_PACKAGE_PATH = "../bp-runner/extern/verve/dist/tne-0.0.1-py3-none-any.whl"
 image_models = ["dall-e-3"]
 
 # List of models served over SageMaker LMI
 _LMI_MODELS = {
     "Llama-3-70B-Instruct": os.getenv("TNE_LLAMA_3_70B_INSTRUCT_ENDPOINT", "")
 }
+DATA_BUFFER_LENGTH = 2500
 
 smr_client = boto3.client("sagemaker-runtime")  # type: SageMakerRuntimeClient
 
@@ -90,6 +94,29 @@ class LLMResponse(BaseModel):
 
     class Config:
         arbitrary_types_allowed = True
+
+
+def update_data_context_buffer(session, file_name, data_context_buffer):
+    try:
+        data = session.get_object(file_name)
+        match type(data):
+            case pd.DataFrame:
+                data_context_buffer += f"{file_name}: {data.head().to_string()}"
+            case str:
+                if len(data) <= DATA_BUFFER_LENGTH:
+                    data_context_buffer += data
+                else:
+                    data_context_buffer += data[:DATA_BUFFER_LENGTH]
+    except ValueError as ve:
+        data = session.get_object_bytes(file_name).decode("utf-8")
+        if len(data) <= DATA_BUFFER_LENGTH:
+            data_context_buffer += data
+        else:
+            data_context_buffer += data[:DATA_BUFFER_LENGTH]
+    except IOError as ie:
+        return data_context_buffer
+
+    return data_context_buffer
 
 
 async def collect_messages(generator: AsyncGenerator):
@@ -346,6 +373,51 @@ class BPAgent:
             elif type(python_step_resp) is tuple:
                 step_output.text = python_step_resp[0]
                 step_output.data = python_step_resp[1]
+                # vega_json = await vega_chart(step_output.data, uid)
+                vega_json = None
+                if not vega_json:
+                    yield tabulate(
+                        step_output.data.head(),
+                        headers="keys",
+                        tablefmt="pipe",
+                        showindex=False,
+                    )
+                else:
+                    yield "```vega\n"
+                    yield vega_json
+                    yield "\n```"
+                yield "\n\n"
+            elif type(python_step_resp) is pd.DataFrame:
+                step_output.data = python_step_resp
+                # vega_json = await vega_chart(step_output.data, uid)
+                vega_json = None
+                if not vega_json:
+                    yield tabulate(
+                        step_output.data.head(),
+                        headers="keys",
+                        tablefmt="pipe",
+                        showindex=False,
+                    )
+                else:
+                    yield "```vega\n"
+                    yield vega_json
+                    yield "\n```"
+                yield "\n\n"
+            else:
+                raise NotImplementedError
+
+        elif proc_step.type == "python_code":
+            try:
+                python_step_resp = await self.__run_python_code(step_input, proc_step, uid)
+            except Exception as e:
+                raise e
+            if type(python_step_resp) is str:
+                step_output.text = python_step_resp
+                yield python_step_resp
+                yield "\n"
+            elif type(python_step_resp) is tuple:
+                step_output.text = python_step_resp[0]
+                step_output.data = python_step_resp[1]
                 vega_json = await vega_chart(step_output.data, uid)
                 if not vega_json:
                     yield tabulate(
@@ -377,18 +449,13 @@ class BPAgent:
             else:
                 raise NotImplementedError
 
-        elif proc_step.type == "python_code":
-            python_step_resp = None
-            try:
-                python_step_resp = await self.__run_python_code(step_input, proc_step, uid)
-            except Exception as e:
-                raise e
-
         # Generate + run Python code
-        elif proc_step.type == "llm-python":
+        elif proc_step.type == "code_generation":
             async for message in self.__run_llm_python_step(step_input, proc_step, uid):
                 if type(message) is LLMResponse:
                     step_output = message
+                else:
+                    yield message
 
         # Nested BP step
         elif proc_step.type == "bp":
@@ -1314,64 +1381,39 @@ class BPAgent:
             raise e
 
     async def __run_llm_python_code(
-            self, llm_resp, step, step_input, uid, retry_no, session_id
+            self, llm_code, step, uid, retry_no, session_id
     ) -> AsyncGenerator:
         """Code interpreter module; allow the LLMs to generate and run Python code on the data within the BP."""
-        if type(llm_resp) is list:
-            code_output = " ".join(llm_resp)
-        elif type(llm_resp) is str:
-            code_output = llm_resp
-        else:
-            raise NotImplementedError
-
-        # Attempt to parse executable code from the LLM response
-        code = None
-        comma_ind = code_output.find("#")
-        import_ind = code_output.find("import")
-        if import_ind > comma_ind >= 0:
-            start_ind = comma_ind
-        elif comma_ind > import_ind >= 0:
-            start_ind = import_ind
-        else:
-            start_ind = 0  # Probably will fail
-        if start_ind != -1:
-            code = code_output[start_ind:]
-
         # Run the code
-        if code:
+        if llm_code:
+
+            # Redirect stdout to local buffer
+            namespace = {}
+            stdout = sys.stdout
+            sys.stdout = string_buffer = StringIO()
+
+            # Install the TNE Python SDK into the code execution environment
             try:
-                # Pass data variables to scope of the function
-                sources = step.data_sources
-                for s in sources:
-                    s = s.strip()
-                    # Dataframes
-                    if s not in step.data.keys():
-                        df_data = step.parent.data.get(s)
-                        step.data.update({s: df_data})
-                func_scope = {}
-                for k in step.data.keys():
-                    func_scope[k] = step.data.get(k).get("data")
+                subprocess.check_call([sys.executable, "-m", "pip", "install", TNE_PACKAGE_PATH])
+            except subprocess.CalledProcessError as e:
+                raise e
 
-                exec(code, func_scope)
-
-                df = func_scope.get("result")
-                if df:
-                    df_res = df
-                    yield LLMResponse(text=code, data=df_res)
+            try:
+                exec(f'__name__ = "__main__"\n{llm_code}', {}, namespace)
 
             except Exception as e:
                 # Try to fix errors
-                yield FlowLog(error=f"Got error while running LLM code {code}: {e}")
+                yield FlowLog(error=f"Got error while running LLM code {llm_code}: {e}")
                 if retry_no < step.parent.server_config.max_retries:
                     yield "Encountered error executing Python code. Attempting to debug...\n"
-                    manifest = copy.deepcopy(step.parent.manifests.get("debug"))
+                    debug_proc = get_s3_proc("Python Debugger", "SYSTEM")
+                    debug_proc_manifest = debug_proc.manifests.get("debugger")
 
-                    step_input = f"ERROR: {e}\n\nCODE: {code}"
+                    step_input = f"ERROR: {e}\n\nCODE: {llm_code}"
                     collected_messages = []
                     async for message in self.process_llm(
                             question=step_input,
-                            proc_step=step,
-                            manifest=manifest,
+                            manifest=debug_proc_manifest,
                             uid=uid,
                             session_id=session_id,
                             use_alias=False,
@@ -1394,13 +1436,18 @@ class BPAgent:
                     # Attempt to run the debugged code
                     async for message in self.__run_llm_python_code(
                             formatted_code,
-                            step,
                             step_input,
                             uid,
                             retry_no + 1,
                             session_id,
                     ):
                         yield message
+
+            finally:
+                sys.stdout = stdout
+
+            result = namespace.get("result")
+            yield LLMResponse(text=llm_code, data=result)
 
     async def __run_llm_python_step(
             self, step_input: str, step: ProcessStep, uid: str, session_id: str = ""
@@ -1410,12 +1457,53 @@ class BPAgent:
         retry_no = 0
         llm_resp = None
 
+        # 1. Use TNE Python SDK package to inject relevant data into LLM prompt
+        data_context_buffer = f"UID: {uid}\n"
+        session = TNE(uid)
+
+        # a. Deterministically connected data sources from UI
+        for s in step.data_sources:
+            data_context_buffer = update_data_context_buffer(session, s, data_context_buffer)
+
+        """
+        # b. EXPERIMENTAL - Cross-reference question with available data sources and add to buffer
+        uid_data_sources = session.list_data()
+        data_linker_proc = get_s3_proc("Data Link", "SYSTEM")
+        data_link_manifest = data_linker_proc.manifests.get("dataLinker")
+        data_link_prompt = f"{uid_data_sources}\n\n{data_link_manifest.get('prompt')}"
+        data_link_manifest["prompt"] = data_link_prompt
+
+        collected_messages = []
+        try:
+            async for message in self.process_llm(
+                    step_input,
+                    None,
+                    uid,
+                    data_link_manifest,
+                    session_id=session_id,
+            ):
+                if type(message) is not FlowLog:
+                    collected_messages.append(message)
+        except Exception as e:
+            raise e
+
+        data_links = "".join(collected_messages).split(",")
+        for d in data_links:
+            if d != "None" and d not in step.data_sources:
+                data_context_buffer = update_data_context_buffer(session, d.replace('\\', '').strip(), data_context_buffer)
+        """
+
         # API call to the LLM for code generation
+        code_gen_proc = get_s3_proc("CodeGen", "SYSTEM")
+        code_gen_manifest = code_gen_proc.manifests.get("codeGenerator")
+        code_gen_prompt = f"{data_context_buffer}\n\n{code_gen_manifest}"
+        code_gen_manifest["prompt"] = code_gen_prompt
         while retry_no < step.parent.server_config.max_retries and not llm_resp:
             collected_messages = []
             async for message in self.process_llm(
                     question=step_input,
-                    proc_step=step,
+                    proc_step=None,
+                    manifest=code_gen_manifest,
                     uid=uid,
                     session_id=session_id,
                     use_alias=False,
@@ -1427,21 +1515,30 @@ class BPAgent:
             llm_resp = "".join(collected_messages)
             retry_no += 1
 
+        llm_resp = "".join(collected_messages)
+
         # Execute the code
         regex_pattern = "```"
         yield FlowLog(
             message=f"[Assistant][call_llm] Extracting data from LLM response with pattern {regex_pattern}"
         )
-        formatted_code = self.__parse_llm_response(llm_resp, regex_pattern)
+        parsed_resp = self.__parse_llm_response(llm_resp, regex_pattern)
+        if "python" in parsed_resp:
+            formatted_code = parsed_resp.split("python\n")[1]
+        else:
+            formatted_code = parsed_resp
+
+        # Error case
         if type(formatted_code) is FlowLog:
             yield formatted_code
+
+        # Run the generated code
         async for message in self.__run_llm_python_code(
                 formatted_code,
-                step,
                 step_input,
                 uid,
                 0,
-                session_id,
+                session_id
         ):
             yield message
 
@@ -1458,19 +1555,21 @@ class BPAgent:
         namespace = {}
         stdout = sys.stdout
         sys.stdout = string_buffer = StringIO()
-        tne_package_path = "../bp-runner/extern/verve/dist/tne-0.0.1-py3-none-any.whl"
 
+        # Install the TNE Python SDK into the code execution environment
         try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", tne_package_path])
+            subprocess.check_call([sys.executable, "-m", "pip", "install", TNE_PACKAGE_PATH])
         except subprocess.CalledProcessError as e:
             return {'error': str(e)}
 
         try:
             exec(f'__name__ = "__main__"\n{module_code}', {}, namespace)
-            output = string_buffer.getvalue()
         finally:
             sys.stdout = stdout
 
+        return namespace.get("result")
+
+    # DEPRECATED - current experts use __run_python_code
     async def __run_python_step(
             self,
             step_input: Union[str, pd.DataFrame],
@@ -1508,6 +1607,7 @@ class BPAgent:
 
         try:
             # Load Python code from S3
+            proc_step.name = proc_step.name.split(".")[0]
             module_name, module_code = get_python_s3_module(proc_step.name, uid)
             if re.search(r"^FEATURE_FLAG_KNATIVE_RUNTIME = True$", module_code, re.M):
                 # Add kwargs from the step graph
