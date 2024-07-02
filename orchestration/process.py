@@ -47,7 +47,6 @@ from tabulate import tabulate
 
 import krt
 
-sys.path.append(os.path.join(os.path.dirname(__file__), "../../verve/"))
 from tne.TNE import TNE
 # Uncomment below to use local SlashGPT
 # sys.path.append(os.path.join(os.path.dirname(__file__), "../../SlashTNE/src"))
@@ -56,7 +55,7 @@ logger = logging.getLogger(__name__)
 
 # Literal constants
 BUCKET_NAME = settings.user_artifact_bucket
-TNE_PACKAGE_PATH = "../bp-runner/extern/verve/dist/tne-0.0.1-py3-none-any.whl"
+TNE_PACKAGE_PATH = "./tne-0.0.1-py3-none-any.whl"
 image_models = ["dall-e-3"]
 
 # List of self-hosted models served over SageMaker endpoint

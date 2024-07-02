@@ -18,7 +18,6 @@ pandas
 plotly==5.17.0
 prompt-toolkit==3.0.39
 protobuf==4.24.4
-psutil==5.9.5
 pydantic
 PyYAML
 ray
@@ -50,39 +49,3 @@ black
 termcolor==2.4.0
 kubernetes_asyncio
 boto3-stubs[sagemaker-runtime]
-
-# General opentelemetry dependencies.
-opentelemetry-distro[otlp]==0.44b0
-
-# Below are specific opentelemetry-instrumentation-* dependencies.
-# Generate these dependencies by running this command inside the activated python environment:
-#     opentelemetry-bootstrap --action requirements | sort
-# Which yields the below opentelemetry-instrumentation-* dependencies.
-# Re-run that after adding or removing dependencies which impact auto-instrumentation.
-# The below opentelemetry-instrumentation-* dependencies are listed explicitly.
-# But they could be generated dyncamically as part of the docker build using:
-#     opentelemetry-bootstrap --action install
-# See https://opentelemetry.io/docs/languages/python/automatic/
-opentelemetry-instrumentation-aiohttp-client==0.44b0
-# This dependency is broken: opentelemetry-instrumentation-aiohttp-server==0.44b0
-# See https://github.com/open-telemetry/opentelemetry-python-contrib/issues/2053#issuecomment-1928485674
-opentelemetry-instrumentation-asgi==0.44b0
-opentelemetry-instrumentation-asyncio==0.44b0
-opentelemetry-instrumentation-aws-lambda==0.44b0
-opentelemetry-instrumentation-boto3sqs==0.44b0
-opentelemetry-instrumentation-botocore==0.44b0
-opentelemetry-instrumentation-dbapi==0.44b0
-opentelemetry-instrumentation-fastapi==0.44b0
-opentelemetry-instrumentation-grpc==0.44b0
-opentelemetry-instrumentation-httpx==0.44b0
-opentelemetry-instrumentation-jinja2==0.44b0
-opentelemetry-instrumentation-logging==0.44b0
-opentelemetry-instrumentation-requests==0.44b0
-opentelemetry-instrumentation-sqlalchemy==0.44b0
-opentelemetry-instrumentation-sqlite3==0.44b0
-opentelemetry-instrumentation-system-metrics==0.44b0
-opentelemetry-instrumentation-tornado==0.44b0
-opentelemetry-instrumentation-urllib3==0.44b0
-opentelemetry-instrumentation-urllib==0.44b0
-opentelemetry-instrumentation-wsgi==0.44b0
-# End of generated opentelemetry-instrumentation-* dependencies.
