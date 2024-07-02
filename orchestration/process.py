@@ -1522,6 +1522,23 @@ class BPAgent:
     def is_image_llm(proc_step):
         return proc_step.manifest.get("model").get("model_name") in image_models
 
+    async def agents(
+            self,
+            category: str,
+            agent_id: str,
+            inputs: Dict,
+            params: Dict,
+            uid: str,
+            session_id: str = "",
+    ) -> AsyncGenerator:
+        """Manages LLM agents (more documentation forthcoming)."""
+        for i in range(10):
+            await asyncio.sleep(1.0)
+            yield f"{i}"
+
+        yield "___END___";
+        yield "0123456789";
+
     @classmethod
     def __parse_llm_response(cls, res, pattern) -> Union[str, FlowLog]:
         # Filter the LLM output based off of a specified regex pattern
