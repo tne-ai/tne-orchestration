@@ -12,7 +12,7 @@ import sys
 import time
 import subprocess
 from io import StringIO
-from typing import Any, Dict, Union, Optional, AsyncGenerator
+from typing import Any, Dict, Union, Tuple, Optional, AsyncGenerator
 
 import boto3
 import pandas as pd
@@ -1393,7 +1393,7 @@ class BPAgent:
                 sys.stdout = stdout
 
             result = namespace.get("result")
-            yield LLMResponse(text=llm_code, data=result)
+            yield result
 
     async def __run_llm_python_step(
             self, step_input: Any, step: ProcessStep, uid: str, session_id: str = ""
@@ -1487,6 +1487,7 @@ class BPAgent:
             yield formatted_code
 
         # Run the generated code
+        collected_messages = []
         async for message in self.__run_llm_python_code(
                 formatted_code,
                 step_input,
@@ -1494,7 +1495,15 @@ class BPAgent:
                 0,
                 session_id
         ):
-            yield message
+            collected_messages.append(message)
+
+            if type(message) is not pd.DataFrame:
+                yield message
+
+        if step.data_output_name:
+            upload_to_s3(step.data_output_name, formatted_code, uid)
+
+        yield LLMResponse(text=formatted_code, data=collected_messages[-1])
 
     async def __run_python_code(
             self,
