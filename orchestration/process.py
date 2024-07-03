@@ -8,9 +8,9 @@ import logging
 import os
 import platform
 import re
+import subprocess
 import sys
 import time
-import subprocess
 from io import StringIO
 from typing import Any, Dict, Union, Tuple, Optional, AsyncGenerator
 
@@ -45,10 +45,10 @@ from orchestration.v2.api.util import (
 from pydantic import BaseModel
 from slashgpt.chat_session import ChatSession
 from tabulate import tabulate
+from tne.TNE import TNE
 
 import krt
 
-from tne.TNE import TNE
 # Uncomment below to use local SlashGPT
 # sys.path.append(os.path.join(os.path.dirname(__file__), "../../SlashTNE/src"))
 
@@ -60,10 +60,11 @@ TNE_PACKAGE_PATH = "./tne-0.0.1-py3-none-any.whl"
 image_models = ["dall-e-3"]
 
 # List of self-hosted models served over SageMaker endpoint
-_SAGEMAKER_MODELS = {
-    "Llama-3-70B-Instruct": os.getenv("TNE_LLAMA_3_70B_INSTRUCT_ENDPOINT", "")
-}
-DATA_BUFFER_LENGTH = 5000
+_SAGEMAKER_MODELS = [
+    "Llama-3-8B",
+    "Llama-3-70B-Instruct",
+]
+DATA_BUFFER_LENGTH = 2500
 
 smr_client = boto3.client("sagemaker-runtime")  # type: SageMakerRuntimeClient
 
@@ -1093,7 +1094,7 @@ class BPAgent:
                             llm_resp = "".join(collected_messages)
                             retry_no += 1
                         elif proc_step.manifest.get("model").get("engine_name") == "sagemaker" \
-                                or model_name in _SAGEMAKER_MODELS.keys():  # TODO(rakuto): Workaround since engineName is hardcoded to `groq` in ManifestEditor.tsx
+                                or model_name in _SAGEMAKER_MODELS:  # TODO(rakuto): Workaround since engineName is hardcoded to `groq` in ManifestEditor.tsx
 
                             messages = []
                             system_prompt = proc_step.manifest.get('prompt', '')
