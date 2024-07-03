@@ -246,6 +246,7 @@ class ProcessStep:
         self.show_debug = proc_step.get("show_debug")
         self.max_count = proc_step.get("max_count")
         self.min_similarity = proc_step.get("min_similarity")
+        self.prompt = proc_step.get("prompt")
 
         # Function
         self.manifest = None

@@ -97,7 +97,7 @@ def update_data_context_buffer(session, file_name, data_context_buffer):
         data = session.get_object(file_name)
         match type(data):
             case pd.DataFrame:
-                data_context_buffer += f"{file_name}: {data.head().to_string()}"
+                data_context_buffer += f"{file_name}: {data.head().to_string()}\n"
             case str:
                 if len(data) <= DATA_BUFFER_LENGTH:
                     data_context_buffer += data
@@ -429,7 +429,8 @@ class BPAgent:
                 yield "\n\n"
             elif type(python_step_resp) is pd.DataFrame:
                 step_output.data = python_step_resp
-                vega_json = await vega_chart(step_output.data, uid)
+                # vega_json = await vega_chart(step_output.data, uid)
+                vega_json = None
                 if not vega_json:
                     yield tabulate(
                         step_output.data.head(),
@@ -1395,7 +1396,7 @@ class BPAgent:
             yield LLMResponse(text=llm_code, data=result)
 
     async def __run_llm_python_step(
-            self, step_input: str, step: ProcessStep, uid: str, session_id: str = ""
+            self, step_input: Any, step: ProcessStep, uid: str, session_id: str = ""
     ) -> AsyncGenerator:
         """Generate and run Python code that operates on DataFrames"""
         # Generate the code
@@ -1409,6 +1410,14 @@ class BPAgent:
         # a. Deterministically connected data sources from UI
         for s in step.data_sources:
             data_context_buffer = update_data_context_buffer(session, s, data_context_buffer)
+
+        # b. If step input exists, inject it into data_context_buffer
+        if type(step_input) is pd.DataFrame:
+            step_input = step_input.head().to_string()
+        elif type(step_input) is str:
+            if len(step_input) >= DATA_BUFFER_LENGTH:
+                step_input = step_input[:DATA_BUFFER_LENGTH]
+        data_context_buffer += f"PROCESS_INPUT: {step_input}"
 
         """
         # b. EXPERIMENTAL - Cross-reference question with available data sources and add to buffer
@@ -1442,6 +1451,8 @@ class BPAgent:
         code_gen_proc = get_s3_proc("CodeGen", "SYSTEM")
         code_gen_manifest = code_gen_proc.manifests.get("codeGenerator")
         code_gen_prompt = f"{data_context_buffer}\n\n{code_gen_manifest}"
+        if step.prompt:
+            code_gen_prompt = f"{code_gen_prompt}\n\nPROMPT FROM USER: {step.prompt}"
         code_gen_manifest["prompt"] = code_gen_prompt
         while retry_no < step.parent.server_config.max_retries and not llm_resp:
             collected_messages = []
@@ -1459,8 +1470,6 @@ class BPAgent:
             yield "\n\n"
             llm_resp = "".join(collected_messages)
             retry_no += 1
-
-        llm_resp = "".join(collected_messages)
 
         # Execute the code
         regex_pattern = "```"
@@ -1489,17 +1498,15 @@ class BPAgent:
 
     async def __run_python_code(
             self,
-            step_input: Union[str, pd.DataFrame],
+            step_input: Optional[Any],
             proc_step: ProcessStep,
             uid: str,
             session_id: str = "",
     ) -> Any:
         module_name, module_code = fetch_python_module(proc_step.name, uid)
 
-        # Redirect stdout to local buffer
-        namespace = {}
-        stdout = sys.stdout
-        sys.stdout = string_buffer = StringIO()
+        # Step input is available through special variable PROCESS_INPUT
+        namespace = {'PROCESS_INPUT': step_input}
 
         # Install the TNE Python SDK into the code execution environment
         try:
@@ -1509,8 +1516,8 @@ class BPAgent:
 
         try:
             exec(f'__name__ = "__main__"\n{module_code}', {}, namespace)
-        finally:
-            sys.stdout = stdout
+        except Exception as e:
+            raise e
 
         return namespace.get("result")
 
