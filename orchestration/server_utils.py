@@ -267,7 +267,8 @@ def fetch_python_module(module_name, uid):
 
     return None
 
-def upload_to_s3(file_name, data, uid) -> str:
+
+async def upload_to_s3(file_name, data, uid) -> str:
     """Upload an object to S3"""
     s3_path = f"d/{uid}/{DATA_DIR}"
 
@@ -307,6 +308,32 @@ def upload_to_s3(file_name, data, uid) -> str:
     except Exception as e:
         raise e
 
+def get_data_from_s3(file_name, uid):
+    s3 = boto3.client("s3")
+    data_path = f"d/{uid}/data"
+    bucket_contents = s3.list_objects(
+        Bucket=BUCKET_NAME,
+        Prefix=data_path,
+    )["Contents"]
+
+    # Load processes from S3
+    for obj in bucket_contents:
+        obj_filename = obj.get("Key").split("/")[-1]
+        if obj_filename == file_name:
+            if obj_filename.split(".")[-1] in ["png", "jpg", "jpeg"]:
+                binary_content = s3.get_object(Bucket=BUCKET_NAME, Key=obj["Key"])[
+                    "Body"
+                ].read()
+                file_content = base64.b64encode(binary_content).decode("utf-8")
+            else:
+                file_content = (
+                    s3.get_object(Bucket=BUCKET_NAME, Key=obj["Key"])["Body"]
+                    .read()
+                    .decode("utf-8")
+                )
+            return file_content
+
+    return None
 
 def get_s3_proc(proc_name: str, uid: str):
     """Fetches a process file from S3"""

@@ -28,6 +28,7 @@ from orchestration.server_utils import (
     get_s3_dir_summary,
     get_python_s3_module,
     fetch_python_module,
+    get_data_from_s3,
     upload_to_s3,
     parse_s3_proc_data_no_regex,
     is_base64_image,
@@ -308,7 +309,7 @@ class BPAgent:
 
                     response = requests.get(img_url)
                     if response.status_code == 200:
-                        img_s3_url = upload_to_s3(img_filename, response.content, uid)
+                        img_s3_url = await upload_to_s3(img_filename, response.content, uid)
                         step_output.text = f"![]({img_s3_url})"
                         step_output.data = base64.b64encode(response.content).decode(
                             "utf-8"
@@ -540,7 +541,7 @@ class BPAgent:
 
         if sources and sources[0] != "none":
             for data_source in sources:
-                data = proc_step.data.get(data_source)
+                data = get_data_from_s3(data_source, uid)
                 if type(data) is dict:
                     data = data.get('data')
 
@@ -610,7 +611,7 @@ class BPAgent:
                     try:
                         if proc_step.debug_output_name and proc_step.manifest:
                             full_prompt = f"{manifest.get('prompt')}\n\n{question}"
-                            _ = upload_to_s3(
+                            _ = await upload_to_s3(
                                 proc_step.debug_output_name, full_prompt, uid
                             )
                     except Exception as e:
@@ -960,9 +961,9 @@ class BPAgent:
                                     or data_filename.endswith(".jpg")
                                     or data_filename.endswith(".jpeg")
                             ):
-                                upload_to_s3(s.data_output_name, step_output.data, uid)
+                                await upload_to_s3(s.data_output_name, step_output.data, uid)
                             else:
-                                upload_to_s3(s.data_output_name, step_output.text, uid)
+                                await upload_to_s3(s.data_output_name, step_output.text, uid)
                             yield FlowLog(
                                 message=f"[BPAgent][run_proc] Uploaded {s.data_output_name} to S3..."
                             )
@@ -1501,7 +1502,7 @@ class BPAgent:
                 yield message
 
         if step.data_output_name:
-            upload_to_s3(step.data_output_name, formatted_code, uid)
+            await upload_to_s3(step.data_output_name, formatted_code, uid)
 
         yield LLMResponse(text=formatted_code, data=collected_messages[-1])
 
