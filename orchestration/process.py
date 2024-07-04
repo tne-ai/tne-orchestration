@@ -1504,7 +1504,11 @@ class BPAgent:
         if step.data_output_name:
             await upload_to_s3(step.data_output_name, formatted_code, uid)
 
-        yield LLMResponse(text=formatted_code, data=collected_messages[-1])
+        ret = collected_messages[-1]
+        if type(ret) is pd.DataFrame:
+            yield LLMResponse(text=formatted_code, data=ret)
+        else:
+            yield LLMResponse(text=ret)
 
     async def __run_python_code(
             self,
