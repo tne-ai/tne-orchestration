@@ -963,7 +963,8 @@ class BPAgent:
                             ):
                                 await upload_to_s3(s.data_output_name, step_output.data, uid)
                             else:
-                                await upload_to_s3(s.data_output_name, step_output.text, uid)
+                                if proc_step.type != "code_generation":
+                                    await upload_to_s3(s.data_output_name, step_output.text, uid)
                             yield FlowLog(
                                 message=f"[BPAgent][run_proc] Uploaded {s.data_output_name} to S3..."
                             )
