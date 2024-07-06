@@ -63,7 +63,7 @@ image_models = ["dall-e-3"]
 _SAGEMAKER_MODELS = {
     "Llama-3-70B-Instruct": os.getenv("TNE_LLAMA_3_70B_INSTRUCT_ENDPOINT", "")
 }
-DATA_BUFFER_LENGTH = 2500
+DATA_BUFFER_LENGTH = 5000
 
 smr_client = boto3.client("sagemaker-runtime")  # type: SageMakerRuntimeClient
 
@@ -373,12 +373,15 @@ class BPAgent:
                 # vega_json = await vega_chart(step_output.data, uid)
                 vega_json = None
                 if not vega_json:
-                    yield tabulate(
-                        step_output.data.head(),
-                        headers="keys",
-                        tablefmt="pipe",
-                        showindex=False,
-                    )
+                    if type(step_output.data) is pd.DataFrame:
+                        yield tabulate(
+                            step_output.data.head(),
+                            headers="keys",
+                            tablefmt="pipe",
+                            showindex=False,
+                        )
+                    elif type(step_output.data) is str:
+                        yield step_output.data
                 else:
                     yield "```vega\n"
                     yield vega_json
@@ -417,12 +420,15 @@ class BPAgent:
                 step_output.data = python_step_resp[1]
                 vega_json = await vega_chart(step_output.data, uid)
                 if not vega_json:
-                    yield tabulate(
-                        step_output.data.head(),
-                        headers="keys",
-                        tablefmt="pipe",
-                        showindex=False,
-                    )
+                    if type(step_output.data) is pd.DataFrame:
+                        yield tabulate(
+                            step_output.data.head(),
+                            headers="keys",
+                            tablefmt="pipe",
+                            showindex=False,
+                        )
+                    elif type(step_output.data) is str:
+                        yield step_output.data
                 else:
                     yield "```vega\n"
                     yield vega_json
@@ -678,7 +684,7 @@ class BPAgent:
                 if question.startswith("./"):
                     proc_name = question.split("--")[0].split("/")[1].strip()
                     if len(question.split("--")) > 1:
-                        user_question = question.split("--")[1].strip()
+                        user_question = "".join(question.split("--")[1:]).strip()
                         question = user_question
                     try:
                         if uid == "SYSTEM":
@@ -986,7 +992,10 @@ class BPAgent:
                         newline_str = ""
                         if len(step_str) > 0:
                             newline_str = "\n\n"
-                        step_str += f"{newline_str}{step_output.data.head()}"
+                        if type(step_output.data) is pd.DataFrame:
+                            step_str += f"{newline_str}{step_output.data.head()}"
+                        elif type(step_output.data) is str:
+                            step_str += f"{newline_str}{step_output.data}"
                     step_input += step_str
                 elif proc_step.output_type == "dispatch":
                     # Load the next manifest from possible_outputs dictionary
@@ -1006,7 +1015,10 @@ class BPAgent:
                             newline_str = ""
                             if len(step_str) > 0:
                                 newline_str += "\n\n"
-                            step_str += f"{newline_str}{step_output.data.head()}"
+                            if type(step_output.data) is pd.DataFrame:
+                                step_str += f"{newline_str}{step_output.data.head()}"
+                            elif type(step_output.data) is str:
+                                step_str += f"{newline_str}{step_output.data}"
                         if step_output.data is not None:
                             step_input = step_output.data
                         else:
@@ -1329,7 +1341,7 @@ class BPAgent:
             raise e
 
     async def __run_llm_python_code(
-            self, llm_code, step, uid, retry_no, session_id
+            self, llm_code, step, step_input, uid, retry_no, session_id
     ) -> AsyncGenerator:
         """Code interpreter module; allow the LLMs to generate and run Python code on the data within the BP."""
         # Run the code
@@ -1346,11 +1358,15 @@ class BPAgent:
             except subprocess.CalledProcessError as e:
                 raise e
 
+
             try:
                 exec(f'__name__ = "__main__"\n{llm_code}', {}, namespace)
 
             except Exception as e:
                 # Try to fix errors
+                result = "#USER QUERY: {step_input}\n\nresult = None"
+                yield result
+                """IN DEV: autoheal
                 yield FlowLog(error=f"Got error while running LLM code {llm_code}: {e}")
                 if retry_no < step.parent.server_config.max_retries:
                     yield "Encountered error executing Python code. Attempting to debug...\n"
@@ -1384,16 +1400,17 @@ class BPAgent:
                     # Attempt to run the debugged code
                     async for message in self.__run_llm_python_code(
                             formatted_code,
+                            step,
                             step_input,
                             uid,
                             retry_no + 1,
                             session_id,
                     ):
                         yield message
+                """
 
             finally:
                 sys.stdout = stdout
-
             result = namespace.get("result")
             yield result
 
@@ -1475,14 +1492,15 @@ class BPAgent:
 
         # Execute the code
         regex_pattern = "```"
-        yield FlowLog(
-            message=f"[Assistant][call_llm] Extracting data from LLM response with pattern {regex_pattern}"
-        )
         parsed_resp = self.__parse_llm_response(llm_resp, regex_pattern)
-        if "python" in parsed_resp:
-            formatted_code = parsed_resp.split("python\n")[1]
+        if type(parsed_resp) is str:
+            if "python" in parsed_resp:
+                formatted_code = parsed_resp.split("python\n")[1]
+            else:
+                formatted_code = parsed_resp
+        # The LLM didn't generate code; likely because of a conversational, non-data question
         else:
-            formatted_code = parsed_resp
+            formatted_code = f"# USER_QUERY: {step_input}\n\nresult = 'None'"
 
         # Error case
         if type(formatted_code) is FlowLog:
@@ -1492,6 +1510,7 @@ class BPAgent:
         collected_messages = []
         async for message in self.__run_llm_python_code(
                 formatted_code,
+                step,
                 step_input,
                 uid,
                 0,
