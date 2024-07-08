@@ -63,6 +63,7 @@ image_models = ["dall-e-3"]
 _SAGEMAKER_MODELS = [
     "Llama-3-8B",
     "Llama-3-70B-Instruct",
+    "Llama3-ChatQA-1.5-8B",
 ]
 DATA_BUFFER_LENGTH = 2500
 
@@ -1102,8 +1103,7 @@ class BPAgent:
                                 messages.append({"role": "system", "content": system_prompt})
                             messages.append({"role": "user", "content": step_input})
 
-                            openai = AsyncOpenAI(base_url=os.getenv("SAGEMAKER_MESSAGE_API_ENDPOINT",
-                                                                    "https://chatapi.app.tne.ai") + "/v1")
+                            openai = AsyncOpenAI(base_url=settings.msgapi_endpiont + "/v1")
                             stream_response = await openai.chat.completions.create(
                                 model=model_name,
                                 messages=messages,
