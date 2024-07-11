@@ -862,7 +862,7 @@ class BPAgent:
         with tracer.start_as_current_span(span_name) as span:
             span.set_attribute("tne.orchestration.fun_name", fun_name)
             span.set_attribute("tne.orchestration.proc_name", proc.name)
-            async for message in self.run_proc(
+            async for message in self.run_proc_inner_impl(
                 question,
                 proc,
                 uid,
