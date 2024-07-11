@@ -20,6 +20,7 @@ import requests
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError
 from mypy_boto3_sagemaker_runtime.client import SageMakerRuntimeClient
 from openai import AsyncOpenAI
+from opentelemetry import trace
 from orchestration.bp import BP, ProcessStep
 from orchestration.server_utils import (
     generate_stream,
@@ -196,7 +197,41 @@ class BPAgent:
     def _process_event(self, callback_type, data):
         self._callback(callback_type, data)
 
+    # __run_step is a wrapper for __run_step_inner_impl.
+    # Its purpose is to setup a new enclosing OTel span.
+    # Only __run_step should call __run_step_inner_impl.
     async def __run_step(
+        self,
+        proc_step,
+        proc,
+        step_input,
+        dispatched_input,
+        uid,
+        session_id,
+        is_spinning,
+        show_description=True,
+    ) -> AsyncGenerator:
+        tracer = trace.get_tracer(__name__)
+        fun_name = "BPAgent.run_step"
+        span_name = f'{fun_name}("{proc_step.type}", "{proc_step.name}")'
+        with tracer.start_as_current_span(span_name) as span:
+            span.set_attribute("tne.orchestration.fun_name", fun_name)
+            span.set_attribute("tne.orchestration.step_type", proc_step.type)
+            span.set_attribute("tne.orchestration.step_name", proc_step.name)
+            async for message in self.__run_step_inner_impl(
+                proc_step,
+                proc,
+                step_input,
+                dispatched_input,
+                uid,
+                session_id,
+                is_spinning,
+                show_description=show_description,
+            ):
+                yield message
+
+    # Only __run_step should call __run_step_inner_impl.
+    async def __run_step_inner_impl(
             self,
             proc_step,
             proc,
@@ -808,7 +843,38 @@ class BPAgent:
         except Exception as e:
             raise e
 
+    # run_proc is a wrapper for run_proc_inner_impl.
+    # Its purpose is to setup a new enclosing OTel span.
+    # Only run_proc should call run_proc_inner_impl.
     async def run_proc(
+        self,
+        question: str,
+        proc: BP,
+        uid: str,
+        is_sub_proc: bool = False,
+        step_no: int = 0,
+        session_id: str = "",
+        show_description: bool = True,
+    ) -> AsyncGenerator:
+        tracer = trace.get_tracer(__name__)
+        fun_name = "BPAgent.run_proc"
+        span_name = f'{fun_name}("{proc.name}")'
+        with tracer.start_as_current_span(span_name) as span:
+            span.set_attribute("tne.orchestration.fun_name", fun_name)
+            span.set_attribute("tne.orchestration.proc_name", proc.name)
+            async for message in self.run_proc_inner_impl(
+                question,
+                proc,
+                uid,
+                is_sub_proc=is_sub_proc,
+                step_no=step_no,
+                session_id=session_id,
+                show_description=show_description,
+            ):
+                yield message
+
+    # Only run_proc should call run_proc_inner_impl.
+    async def run_proc_inner_impl(
             self,
             question: str,
             proc: BP,
