@@ -16,6 +16,7 @@ from slashgpt.chat_config_with_manifests import ChatConfigWithManifests
 
 BUCKET_NAME = "bp-authoring-files"
 
+
 class MalformedDataError(Exception):
     def __init__(self, message):
         super().__init__(message)

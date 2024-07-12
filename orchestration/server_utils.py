@@ -34,7 +34,15 @@ PROC_DIR = "proc"
 AGENT_DIR = "manifests"
 CODE_DIR = "modules"
 DATA_DIR = "data"
-OPERATOR_NODES = ["llm", "proc", "python", "python_code", "code_generation", "rag", "semantic"]
+OPERATOR_NODES = [
+    "llm",
+    "proc",
+    "python",
+    "python_code",
+    "code_generation",
+    "rag",
+    "semantic",
+]
 
 # RAG literals
 RAG_DB_HOST = "postgresql-ebp.cfwmuvh4blso.us-west-2.rds.amazonaws.com"
@@ -308,6 +316,7 @@ async def upload_to_s3(file_name, data, uid) -> str:
     except Exception as e:
         raise e
 
+
 def get_data_from_s3(file_name, uid):
     s3 = boto3.client("s3")
     data_path = f"d/{uid}/data"
@@ -335,6 +344,7 @@ def get_data_from_s3(file_name, uid):
 
     return None
 
+
 def get_s3_proc(proc_name: str, uid: str):
     """Fetches a process file from S3"""
     try:
@@ -355,7 +365,6 @@ def get_s3_proc(proc_name: str, uid: str):
                     proc_contents = parse_graph(s3_proc, yaml.safe_load(file_content))
                     proc = BP(proc_contents, uid)
                     return proc
-
     except (NoCredentialsError, PartialCredentialsError) as e:
         raise e
     except Exception as e:
@@ -683,7 +692,7 @@ def __construct_step_dict(
             "data_sources": data_sources,
             "input": step_input,
             "max_count": node.get("data").get("maxEmbeddings"),
-            "min_similarity": node.get("data").get("similarityThreshold")
+            "min_similarity": node.get("data").get("similarityThreshold"),
         }
         if data_output_name:
             step_dict["data_output_name"] = data_output_name
@@ -759,7 +768,6 @@ def parse_graph(file_name, graph):
 
     if len(start_ids) == 0:
         return None
-
 
     start_id = start_ids[0]
     visited = set()
