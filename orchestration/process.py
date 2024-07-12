@@ -610,11 +610,11 @@ class BPAgent:
                 else:
                     raise NotImplementedError(f"Unsupported data type {type(data)}")
 
-                if is_base64_image(proc_step.data.get(data_source)):
+                if is_base64_image(data):
                     if manifest.get("images"):
-                        manifest["images"].append(proc_step.data.get(data_source))
+                        manifest["images"].append(data)
                     else:
-                        manifest["images"] = [proc_step.data.get(data_source)]
+                        manifest["images"] = [data]
 
                 data_schemas.append(data_str)
 
@@ -1691,13 +1691,11 @@ class BPAgent:
             sources = proc_step.data_sources
             if sources and sources[0] != "none":
                 for data_source in sources:
-                    data_source = data_source.strip()
-                    # Update with any new data created by the process
-                    if data_source not in proc_step.data.keys():
-                        df_data = proc_step.parent.data.get(data_source).get("data")
-                        proc_step.data.update(
-                            {data_source.split(".")[0].strip(): df_data}
-                        )
+                    try:
+                        session = TNE(uid)
+                        proc_step.data.update({data_source.split(".")[0].strip(): session.get_object(data_source)})
+                    except Exception as e:
+                        pass
                 for k in proc_step.data.keys():
                     if len(k.split(".")) > 1:
                         key_name = k.split(".")[0]
