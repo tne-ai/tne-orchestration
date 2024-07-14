@@ -275,9 +275,7 @@ class BPAgent:
                 raise AttributeError(f"Missing model file for {proc_step.name}")
 
             # Function call
-            elif not proc_step.manifest.get("model") and proc_step.manifest.get(
-                    "functions"
-            ):
+            elif self.is_function_call(proc_step):
                 proc_step.manifest.update({"stream": False})
                 collected_messages = []
                 try:
@@ -305,7 +303,7 @@ class BPAgent:
                     step_output.text = formatted_output
 
             # Determine if this is vision or text model
-            elif proc_step.manifest.get("model").get("model_name") in image_models:
+            elif self.is_image_llm(proc_step):
                 try:
                     async for message in self.__run_llm_step(
                             step_input, proc_step, uid
@@ -918,10 +916,7 @@ class BPAgent:
                         is_spinning = True
                         yield "```SET_IS_SPINNING```"
                         yield "\n"
-                    elif (
-                            proc_step.manifest.get("model").get("model_name")
-                            in image_models
-                    ):
+                    elif self.is_image_llm(proc_step):
                         is_spinning = True
                         yield "```SET_IS_SPINNING```"
                         yield "\n"
@@ -1112,12 +1107,7 @@ class BPAgent:
                         else:
                             if type(step_output) is LLMResponse:
                                 if step_output.data is not None:
-                                    if (
-                                            proc_step.manifest.get("model").get(
-                                                "model_name"
-                                            )
-                                            in image_models
-                                    ):
+                                    if self.is_image_llm(proc_step):
                                         yield step_output.text
                                         yield "\n\n"
                                     elif not is_base64_image(step_output.data):
@@ -1759,6 +1749,13 @@ class BPAgent:
             return step_output
 
         return None
+
+    def is_function_call(proc_step):
+        return not proc_step.manifest.get("model") and proc_step.manifest.get(
+            "functions"
+        )
+    def is_image_llm(proc_step):
+        return proc_step.manifest.get("model").get("model_name") in image_models
 
     @classmethod
     def __parse_llm_response(cls, res, pattern) -> Union[str, FlowLog]:
