@@ -52,6 +52,7 @@ import krt
 
 # Uncomment below to use local SlashGPT
 # sys.path.append(os.path.join(os.path.dirname(__file__), "../../SlashTNE/src"))
+# from slashgpt.chat_session import ChatSession
 
 logger = logging.getLogger(__name__)
 
@@ -60,12 +61,6 @@ BUCKET_NAME = settings.user_artifact_bucket
 TNE_PACKAGE_PATH = "./tne-0.0.1-py3-none-any.whl"
 image_models = ["dall-e-3"]
 
-# List of self-hosted models served over SageMaker endpoint
-_SAGEMAKER_MODELS = [
-    "Llama-3-8B",
-    "Llama-3-70B-Instruct",
-    "Llama3-ChatQA-1.5-8B",
-]
 DATA_BUFFER_LENGTH = 2500
 
 smr_client = boto3.client("sagemaker-runtime")  # type: SageMakerRuntimeClient
@@ -249,8 +244,6 @@ class BPAgent:
             manifest_model = proc_step.manifest.get("model")
             if manifest_model:
                 model_name = manifest_model.get("model_name")
-                if "tne" in model_name and "bigtext" not in model_name:
-                    proc_step.manifest["model"]["model_name"] = "llama3-70b-8192"
 
         # Handle special case where a LLM step picks from a list of manifests to run
         if proc_step.name == "dispatched":
@@ -1150,7 +1143,6 @@ class BPAgent:
                 if proc_step.manifest:
                     if proc_step.manifest.get("model"):
                         model = proc_step.manifest.get("model")
-                        model_name = model.get("model_name")
                         if proc_step.manifest.get("model").get("model_name") == "tne-bigtext-arxiv":
                             endpoint = os.getenv("BIGTEXT_ENDPOINT", "http://localhost:5002/v1")
                             client = AsyncOpenAI(base_url=endpoint)
@@ -1166,32 +1158,6 @@ class BPAgent:
 
                             llm_resp = "".join(collected_messages)
                             retry_no += 1
-                        elif proc_step.manifest.get("model").get("engine_name") == "sagemaker" \
-                                or model_name in _SAGEMAKER_MODELS:  # TODO(rakuto): Workaround since engineName is hardcoded to `groq` in ManifestEditor.tsx
-
-                            messages = []
-                            system_prompt = proc_step.manifest.get('prompt', '')
-                            if len(system_prompt) > 0:
-                                messages.append({"role": "system", "content": system_prompt})
-                            messages.append({"role": "user", "content": step_input})
-                            openai = AsyncOpenAI(base_url=settings.msgapi_endpoint + "/v1")
-                            stream_response = await openai.chat.completions.create(
-                                model=model_name,
-                                messages=messages,
-                                stream=True,
-                                max_tokens=proc_step.manifest.get("max_tokens", None),
-                                temperature=proc_step.manifest.get("temperature", 0),
-                                top_p=proc_step.manifest.get("top_p", None),
-                            )
-
-                            async for chunk in stream_response:
-                                if chunk.choices[0].finish_reason is None:
-                                    content = chunk.choices[0].delta.content
-                                    yield content
-                                    collected_messages.append(content)
-                                else:
-                                    llm_resp = "".join(collected_messages)
-                                    retry_no += 1
                         else:
                             async for message in self.process_llm(
                                     question=step_input,
