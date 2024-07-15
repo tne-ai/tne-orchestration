@@ -95,6 +95,8 @@ class LLMResponse(BaseModel):
     class Config:
         arbitrary_types_allowed = True
 
+def replace_escaped_newlines(chunk: str) -> str:
+    return chunk.replace("\\n", "\n")
 
 def update_data_context_buffer(session, file_name, data_context_buffer):
     try:
@@ -939,9 +941,13 @@ class BPAgent:
                             show_description
                     ):
                         if type(message) is tuple:
+                            if type(message[0]) is str:
+                                message = replace_escaped_newlines(message[0]), message[1]
                             collected_messages.append(message[0])
                             yield message
                         else:
+                            if type(message) is str:
+                                message = replace_escaped_newlines(message)
                             collected_messages.append(message)
                             yield message, not proc_step.suppress_output
                 except AttributeError as ae:
@@ -1168,8 +1174,8 @@ class BPAgent:
                             if len(system_prompt) > 0:
                                 messages.append({"role": "system", "content": system_prompt})
                             messages.append({"role": "user", "content": step_input})
-
-                            openai = AsyncOpenAI(base_url=settings.msgapi_endpiont + "/v1")
+                            # openai = AsyncOpenAI(base_url=settings.msgapi_endpoint + "/v1")
+                            openai = AsyncOpenAI(base_url="http://localhost:8001/v1")
                             stream_response = await openai.chat.completions.create(
                                 model=model_name,
                                 messages=messages,

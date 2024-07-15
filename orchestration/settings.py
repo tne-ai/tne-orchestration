@@ -19,6 +19,10 @@ class Setting(BaseSettings):
     openai_api_key: str = Field(
         description="OpenAI API key",
     )
+    msgapi_endpoint: str = Field(
+        default="http://msgapi-svc.default.svc.cluster.local",
+        description="SageMaker Message API endpoint"
+    )
 
 
 settings = Setting()
