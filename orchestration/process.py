@@ -1174,8 +1174,7 @@ class BPAgent:
                             if len(system_prompt) > 0:
                                 messages.append({"role": "system", "content": system_prompt})
                             messages.append({"role": "user", "content": step_input})
-                            # openai = AsyncOpenAI(base_url=settings.msgapi_endpoint + "/v1")
-                            openai = AsyncOpenAI(base_url="http://localhost:8001/v1")
+                            openai = AsyncOpenAI(base_url=settings.msgapi_endpoint + "/v1")
                             stream_response = await openai.chat.completions.create(
                                 model=model_name,
                                 messages=messages,
