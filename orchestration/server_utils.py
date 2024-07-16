@@ -48,6 +48,11 @@ OPERATOR_NODES = [
 RAG_DB_HOST = "postgresql-ebp.cfwmuvh4blso.us-west-2.rds.amazonaws.com"
 
 
+class GraphParseError(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+
+
 def __random_uuid():
     return str(uuid.uuid4())
 
@@ -362,8 +367,11 @@ def get_s3_proc(proc_name: str, uid: str):
                     "Body"
                 ].read()
                 if file_content:
-                    proc_contents = parse_graph(s3_proc, yaml.safe_load(file_content))
-                    proc = BP(proc_contents, uid)
+                    try:
+                        proc_contents = parse_graph(s3_proc, yaml.safe_load(file_content))
+                        proc = BP(proc_contents, uid)
+                    except Exception as e:
+                        raise GraphParseError(message=e)
                     return proc
     except (NoCredentialsError, PartialCredentialsError) as e:
         raise e

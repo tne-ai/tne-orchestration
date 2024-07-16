@@ -74,6 +74,11 @@ class _Base(BaseModel):
     pass
 
 
+class GraphParseError(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+
+
 class FlowLog(BaseModel):
     message: Optional[str] = None
     """Log message"""
@@ -722,10 +727,15 @@ class BPAgent:
                         if uid == "SYSTEM":
                             show_description = False
                         user_proc = get_s3_proc(proc_name, uid)
-                    except Exception as e:
+                    except (NoCredentialsError, PartialCredentialsError) as ce:
                         aws_token_error = True
                         async for chunk in generate_stream(
-                                f"Error pulling process [{proc_name}] from S3. Please check your AWS credentials."
+                                f"{proc_name}: Received error: {ce}"
+                        ):
+                            yield chunk
+                    except GraphParseError as gp:
+                        async for chunk in generate_stream(
+                            f"{proc_name}: Received error: {gp}"
                         ):
                             yield chunk
                     # Could not find a matching process
