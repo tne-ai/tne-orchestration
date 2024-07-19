@@ -11,7 +11,7 @@ bp-authoring-files/
 ├── d/ 
 │ ├── <UID 1> 
 │ │ ├── data/  # Miscellanous files, like CSV, text, images, etc.
-│ │ ├── items/ # Insight Edge items (NOTE: these will soon be moved elsewhere
+│ │ ├── items/ # Insight Edge items (NOTE: these will soon be moved elsewhere)
 │ │ ├── manifests/   # SlashGPT manifests collection
 │ │ ├── modules/  # Python code collection
 │ │ ├── proc/  # Expert graph collection
