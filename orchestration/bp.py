@@ -215,6 +215,9 @@ class ProcessStep:
         self.max_count = proc_step.get("max_count")
         self.min_similarity = proc_step.get("min_similarity")
         self.prompt = proc_step.get("prompt")
+        self.api_key = proc_step.get("api_key")
+        self.model_name = proc_step.get("model_name")
+        self.engine_name = proc_step.get("engine_name")
 
         # Function
         self.manifest = None

@@ -663,6 +663,9 @@ def __construct_step_dict(
             "suppress_output": node.get("data").get("outputToCanvas"),
             "data_sources": data_sources,
             "input": step_input,
+            "api_key": node.get("data").get("apiKey"),
+            "engine_name": node.get("data").get("engineName"),
+            "model_name": node.get("data").get("modelName")
         }
 
         if data_output_name:
