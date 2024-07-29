@@ -591,6 +591,7 @@ class BPAgent:
 
         if sources and sources[0] != "none":
             for data_source in sources:
+                data_str = None
                 data = get_data_from_s3(data_source, uid)
                 if type(data) is dict:
                     data = data.get("data")
@@ -607,23 +608,24 @@ class BPAgent:
                         )
 
                 # Text file
-                elif type(data) is str:
+                elif type(data) is str and type(data) and not is_base64_image(data):
                     data_str = f"FILENAME: {data_source}\n\n{data}"
 
                 # DataFrame
                 elif type(data) is pd.DataFrame:
                     data_str = f"FILENAME: {data_source}\n\n{data.to_string()}"
 
-                else:
-                    raise NotImplementedError(f"Unsupported data type {type(data)}")
-
-                if is_base64_image(data):
+                elif is_base64_image(data):
                     if manifest.get("images"):
                         manifest["images"].append(data)
                     else:
                         manifest["images"] = [data]
 
-                data_schemas.append(data_str)
+                else:
+                    raise NotImplementedError(f"Unsupported data type {type(data)}")
+
+                if data_str:
+                    data_schemas.append(data_str)
 
             manifest["prompt"] = "\n".join(data_schemas) + f"\n{manifest['prompt']}"
 
