@@ -1510,34 +1510,6 @@ class BPAgent:
                 step_input = step_input[:DATA_BUFFER_LENGTH]
         data_context_buffer += f"PROCESS_INPUT: {step_input}"
 
-        """
-        # b. EXPERIMENTAL - Cross-reference question with available data sources and add to buffer
-        uid_data_sources = session.list_data()
-        data_linker_proc = get_s3_proc("Data Link", "SYSTEM")
-        data_link_manifest = data_linker_proc.manifests.get("dataLinker")
-        data_link_prompt = f"{uid_data_sources}\n\n{data_link_manifest.get('prompt')}"
-        data_link_manifest["prompt"] = data_link_prompt
-
-        collected_messages = []
-        try:
-            async for message in self.process_llm(
-                    step_input,
-                    None,
-                    uid,
-                    data_link_manifest,
-                    session_id=session_id,
-            ):
-                if type(message) is not FlowLog:
-                    collected_messages.append(message)
-        except Exception as e:
-            raise e
-
-        data_links = "".join(collected_messages).split(",")
-        for d in data_links:
-            if d != "None" and d not in step.data_sources:
-                data_context_buffer = update_data_context_buffer(session, d.replace('\\', '').strip(), data_context_buffer)
-        """
-
         # API call to the LLM for code generation
         code_gen_proc = get_s3_proc("CodeGen", "SYSTEM")
         code_gen_manifest = code_gen_proc.manifests.get("codeGenerator")
@@ -1578,6 +1550,8 @@ class BPAgent:
                 formatted_code = parsed_resp.split("python\n")[1]
             else:
                 formatted_code = parsed_resp
+        elif type(parsed_resp) is FlowLog and parsed_resp.message == "[Assistant][call_llm] Regex pattern ``` match not detected. Returning unfiltered output.":
+            formatted_code = llm_resp
         # The LLM didn't generate code; likely because of a conversational, non-data question
         else:
             formatted_code = f"# USER_QUERY: {step_input}\n\nresult = 'None'"
