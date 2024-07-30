@@ -1567,7 +1567,7 @@ class BPAgent:
         ):
             collected_messages.append(message)
 
-            if type(message) is not pd.DataFrame:
+            if type(message) is not pd.DataFrame and type(message) is not pd.Series:
                 yield message
 
         if proc_step.data_output_name:
@@ -1576,6 +1576,8 @@ class BPAgent:
         ret = collected_messages[-1]
         if type(ret) is pd.DataFrame:
             yield LLMResponse(text=formatted_code, data=ret)
+        elif type(ret) is pd.Series:
+            yield LLMResponse(text=formatted_code, data=pd.DataFrame(ret))
         else:
             yield LLMResponse(text=ret)
 
