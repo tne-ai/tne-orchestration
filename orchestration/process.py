@@ -16,6 +16,7 @@ from io import StringIO
 from typing import Any, Dict, Union, Tuple, Optional, AsyncGenerator
 
 import boto3
+import numpy as np
 import pandas as pd
 import requests
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError
@@ -90,7 +91,7 @@ class FlowLog(BaseModel):
 class LLMResponse(BaseModel):
     text: Optional[str] = None
     """Text outputted by the LLM"""
-    data: Optional[pd.DataFrame] = None
+    data: Optional[Union[str, pd.DataFrame]] = None
     """Data outputted by the LLM"""
 
     class Config:
@@ -504,6 +505,7 @@ class BPAgent:
                     step_output = message
                 else:
                     yield message
+            yield "\n\n"
 
         # Nested BP step
         elif proc_step.type == "bp":
@@ -1434,7 +1436,7 @@ class BPAgent:
 
             except Exception as e:
                 # Try to fix errors
-                result = "#USER QUERY: {step_input}\n\nresult = None"
+                result = f"# USER QUERY: {step_input}\n\nresult = None"
                 yield result
                 """IN DEV: autoheal
                 yield FlowLog(error=f"Got error while running LLM code {llm_code}: {e}")
@@ -1548,13 +1550,16 @@ class BPAgent:
         if type(parsed_resp) is str:
             if "python" in parsed_resp:
                 formatted_code = parsed_resp.split("python\n")[1]
+                formatted_code = f"# USER QUERY: {step_input}\n\n{formatted_code}"
             else:
                 formatted_code = parsed_resp
+                formatted_code = f"# USER QUERY: {step_input}\n\n{formatted_code}"
         elif type(parsed_resp) is FlowLog and parsed_resp.message == "[Assistant][call_llm] Regex pattern ``` match not detected. Returning unfiltered output.":
             formatted_code = llm_resp
+            formatted_code = f"# USER QUERY: {step_input}\n\n{formatted_code}"
         # The LLM didn't generate code; likely because of a conversational, non-data question
         else:
-            formatted_code = f"# USER_QUERY: {step_input}\n\nresult = 'None'"
+            formatted_code = f"# USER QUERY: {step_input}\n\nresult = 'None'"
 
         # Error case
         if type(formatted_code) is FlowLog:
@@ -1568,7 +1573,7 @@ class BPAgent:
             collected_messages.append(message)
 
             if type(message) is not pd.DataFrame and type(message) is not pd.Series:
-                yield message
+                yield str(message)
 
         if proc_step.data_output_name:
             await upload_to_s3(proc_step.data_output_name, formatted_code, uid)
@@ -1578,6 +1583,8 @@ class BPAgent:
             yield LLMResponse(text=formatted_code, data=ret)
         elif type(ret) is pd.Series:
             yield LLMResponse(text=formatted_code, data=pd.DataFrame(ret))
+        elif type(ret) is int or type(ret) is np.float64 or type(ret) is np.int64 or type(ret) is dict:
+            yield LLMResponse(text=formatted_code, data=str(ret))
         else:
             yield LLMResponse(text=ret)
 
