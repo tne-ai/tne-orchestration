@@ -1583,10 +1583,10 @@ class BPAgent:
             yield LLMResponse(text=formatted_code, data=ret)
         elif type(ret) is pd.Series:
             yield LLMResponse(text=formatted_code, data=pd.DataFrame(ret))
-        elif type(ret) is int or type(ret) is np.float64 or type(ret) is np.int64 or type(ret) is dict:
-            yield LLMResponse(text=formatted_code, data=str(ret))
-        else:
+        elif type(ret) is str:
             yield LLMResponse(text=ret)
+        else:
+            yield LLMResponse(text=formatted_code, data=str(ret))
 
     async def __run_python_code(
         self,
