@@ -1430,10 +1430,11 @@ class BPAgent:
                 raise e
 
             try:
-                exec(f'__name__ = "__main__"\n{llm_code}', {}, namespace)
+                exec(f'__name__ = "__main__"\n\n{llm_code}', {}, namespace)
 
             except Exception as e:
                 # Try to fix errors
+                print(e)
                 result = f"# USER QUERY: {step_input}\n\nresult = None"
                 yield result
                 """IN DEV: autoheal
@@ -1564,8 +1565,8 @@ class BPAgent:
             yield formatted_code
 
         # Remove notebook-like syntax with result variable
-        if formatted_code.endswith("\n\nresult"):
-            formatted_code = formatted_code[:-len("\n\nresult")]
+        if re.search(r"\n\nresult$", formatted_code):
+            formatted_code = re.sub(r"\n\nresult$", "", formatted_code)
 
         # Run the generated code
         collected_messages = []
