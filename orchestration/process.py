@@ -16,7 +16,6 @@ from io import StringIO
 from typing import Any, Dict, Union, Tuple, Optional, AsyncGenerator
 
 import boto3
-import numpy as np
 import pandas as pd
 import requests
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError
@@ -1417,7 +1416,6 @@ class BPAgent:
         """Code interpreter module; allow the LLMs to generate and run Python code on the data within the BP."""
         # Run the code
         if llm_code:
-
             # Redirect stdout to local buffer
             namespace = {}
             stdout = sys.stdout
@@ -1564,6 +1562,10 @@ class BPAgent:
         # Error case
         if type(formatted_code) is FlowLog:
             yield formatted_code
+
+        # Remove notebook-like syntax with result variable
+        if formatted_code.endswith("\n\nresult"):
+            formatted_code = formatted_code[:-len("\n\nresult")]
 
         # Run the generated code
         collected_messages = []
