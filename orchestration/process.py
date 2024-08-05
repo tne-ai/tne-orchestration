@@ -6,12 +6,15 @@ import inspect
 # Temporary function call workarounds to be incorporated into SlashGPT
 import json
 import logging
+import tempfile
 import os
 import platform
 import re
 import subprocess
 import sys
 import time
+import runpy
+import importlib
 from io import StringIO
 from typing import Any, Dict, Union, Tuple, Optional, AsyncGenerator
 
@@ -123,6 +126,15 @@ def update_data_context_buffer(session, file_name, data_context_buffer):
 
     return data_context_buffer
 
+def execute_temp_file(file_path: str) -> dict:
+    return runpy.run_path(file_path)
+
+
+def save_code_to_temp_file(code: str) -> str:
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".py")
+    with open(temp_file.name, 'w') as f:
+        f.write(code)
+    return temp_file.name
 
 async def collect_messages(generator: AsyncGenerator):
     """Collect all messages from an async generator into a list."""
@@ -1410,79 +1422,40 @@ class BPAgent:
                 yield "\n"
             raise e
 
-    async def __run_llm_python_code(
-        self, llm_code, step, step_input, uid, retry_no, session_id
-    ) -> AsyncGenerator:
+    async def __run_llm_python_code(self, llm_code, step, step_input, uid, retry_no, session_id) -> AsyncGenerator:
         """Code interpreter module; allow the LLMs to generate and run Python code on the data within the BP."""
-        # Run the code
         if llm_code:
-            # Redirect stdout to local buffer
-            namespace = {}
-            stdout = sys.stdout
-            sys.stdout = string_buffer = StringIO()
+            # Save the LLM-generated code to a temporary file
+            temp_file_path = save_code_to_temp_file(llm_code)
 
             # Install the TNE Python SDK into the code execution environment
             try:
-                subprocess.check_call(
-                    [sys.executable, "-m", "pip", "install", TNE_PACKAGE_PATH]
-                )
+                subprocess.check_call([sys.executable, "-m", "pip", "install", TNE_PACKAGE_PATH])
             except subprocess.CalledProcessError as e:
                 raise e
 
             try:
-                exec(f'__name__ = "__main__"\n\n{llm_code}', {}, namespace)
+                # Execute the temporary file and capture the namespace
+                namespace = execute_temp_file(temp_file_path)
+
+                # Access the results from the namespace
+                df_last_3_months = namespace.get('df_last_3_months')
+                result = namespace.get('result')
+
+                if df_last_3_months is not None:
+                    logger.debug(f"df_last_3_months: {df_last_3_months.head()}")
+                    logger.debug(f"df_last_3_months shape: {df_last_3_months.shape}")
+                else:
+                    logger.error("df_last_3_months not found in namespace")
 
             except Exception as e:
-                # Try to fix errors
-                print(e)
+                logger.error(f"Exception occurred: {e}")
                 result = f"# USER QUERY: {step_input}\n\nresult = None"
                 yield result
-                """IN DEV: autoheal
-                yield FlowLog(error=f"Got error while running LLM code {llm_code}: {e}")
-                if retry_no < step.parent.server_config.max_retries:
-                    yield "Encountered error executing Python code. Attempting to debug...\n"
-                    debug_proc = get_s3_proc("Python Debugger", "SYSTEM")
-                    debug_proc_manifest = debug_proc.manifests.get("debugger")
-
-                    step_input = f"ERROR: {e}\n\nCODE: {llm_code}"
-                    collected_messages = []
-                    async for message in self.process_llm(
-                            question=step_input,
-                            manifest=debug_proc_manifest,
-                            uid=uid,
-                            session_id=session_id,
-                            use_alias=False,
-                    ):
-                        if type(message) is not FlowLog:
-                            collected_messages.append(message)
-                        yield message
-                    yield "\n\n"
-                    llm_resp = "".join(collected_messages)
-                    regex_pattern = "```"
-                    yield FlowLog(
-                        message=f"[Assistant][call_llm] Extracting data from LLM response with pattern {regex_pattern}"
-                    )
-                    formatted_code = self.__parse_llm_response(
-                        llm_resp, pattern=regex_pattern
-                    )
-                    if type(formatted_code) is FlowLog:
-                        yield formatted_code
-
-                    # Attempt to run the debugged code
-                    async for message in self.__run_llm_python_code(
-                            formatted_code,
-                            step,
-                            step_input,
-                            uid,
-                            retry_no + 1,
-                            session_id,
-                    ):
-                        yield message
-                """
-
             finally:
-                sys.stdout = stdout
-            result = namespace.get("result")
+                # Clean up the temporary file
+                os.remove(temp_file_path)
+
             yield result
 
     async def __run_llm_python_step(
