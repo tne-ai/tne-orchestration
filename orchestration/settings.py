@@ -25,4 +25,3 @@ class Setting(BaseSettings):
 
 
 settings = Setting()
-breakpoint()
