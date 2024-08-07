@@ -7,7 +7,7 @@ load_dotenv()
 
 class Setting(BaseSettings):
     user_artifact_bucket: str = Field(
-        default="bp-authoring-files",
+        default="bp-authoring-files-dev",
         description="S3 bucket where to store user artifacts",
     )
     rag_endpoint: str = Field(

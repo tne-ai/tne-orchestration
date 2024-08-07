@@ -25,11 +25,12 @@ from orchestration.v2.api.api import (
     RagRequest,
     AnnsRequest,
 )
+from orchestration.settings import settings
 
 from typing import Union, Dict, Tuple
 
 # Inference server literals
-BUCKET_NAME = "bp-authoring-files"
+BUCKET_NAME = settings.user_artifact_bucket
 PROC_DIR = "proc"
 AGENT_DIR = "manifests"
 CODE_DIR = "modules"
