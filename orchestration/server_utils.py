@@ -25,12 +25,10 @@ from orchestration.v2.api.api import (
     RagRequest,
     AnnsRequest,
 )
-from orchestration.settings import settings
 
 from typing import Union, Dict, Tuple
 
 # Inference server literals
-BUCKET_NAME = settings.user_artifact_bucket
 PROC_DIR = "proc"
 AGENT_DIR = "manifests"
 CODE_DIR = "modules"
@@ -225,12 +223,12 @@ def get_s3_ls(bucket_name: str, prefix: str) -> str:
     return dir_summary
 
 
-def get_python_s3_module(module_name, uid):
+def get_python_s3_module(module_name: str, uid: str, bucket_name: str):
     """Load Python code from S3"""
     try:
         s3 = boto3.client("s3")
         python_s3_path = f"d/{uid}/{CODE_DIR}"
-        bucket_contents = s3.list_objects(Bucket=BUCKET_NAME, Prefix=python_s3_path)[
+        bucket_contents = s3.list_objects(Bucket=bucket_name, Prefix=python_s3_path)[
             "Contents"
         ]
 
@@ -240,7 +238,7 @@ def get_python_s3_module(module_name, uid):
             if basename == module_name:
                 file_name = f"{basename}.py"
                 file_content = (
-                    s3.get_object(Bucket=BUCKET_NAME, Key=obj["Key"])["Body"]
+                    s3.get_object(Bucket=bucket_name, Key=obj["Key"])["Body"]
                     .read()
                     .decode("utf-8")
                 )
@@ -254,12 +252,12 @@ def get_python_s3_module(module_name, uid):
     return None
 
 
-def fetch_python_module(module_name, uid):
+def fetch_python_module(module_name: str, uid: str, bucket_name: str):
     """Load Python code from S3"""
     try:
         s3 = boto3.client("s3")
         python_s3_path = f"d/{uid}/{CODE_DIR}"
-        bucket_contents = s3.list_objects(Bucket=BUCKET_NAME, Prefix=python_s3_path)[
+        bucket_contents = s3.list_objects(Bucket=bucket_name, Prefix=python_s3_path)[
             "Contents"
         ]
 
@@ -268,7 +266,7 @@ def fetch_python_module(module_name, uid):
             basename = obj.get("Key").split("/")[-1]
             if basename == module_name:
                 file_content = (
-                    s3.get_object(Bucket=BUCKET_NAME, Key=obj["Key"])["Body"]
+                    s3.get_object(Bucket=bucket_name, Key=obj["Key"])["Body"]
                     .read()
                     .decode("utf-8")
                 )
@@ -282,7 +280,7 @@ def fetch_python_module(module_name, uid):
     return None
 
 
-async def upload_to_s3(file_name, data, uid) -> str:
+async def upload_to_s3(file_name, data, uid, bucket_name) -> str:
     """Upload an object to S3"""
     s3_path = f"d/{uid}/{DATA_DIR}"
 
@@ -309,25 +307,25 @@ async def upload_to_s3(file_name, data, uid) -> str:
         s3 = boto3.client("s3")
 
         s3.put_object(
-            Bucket=BUCKET_NAME,
+            Bucket=bucket_name,
             Key=full_file_name,
             Body=s3_data,
             ContentType=content_type,
         )
 
         region = s3.meta.region_name
-        s3_url = f"https://{BUCKET_NAME}.s3.{region}.amazonaws.com/{full_file_name}"
+        s3_url = f"https://{bucket_name}.s3.{region}.amazonaws.com/{full_file_name}"
 
         return s3_url
     except Exception as e:
         raise e
 
 
-def get_data_from_s3(file_name, uid):
+def get_data_from_s3(file_name, uid, bucket_name):
     s3 = boto3.client("s3")
     data_path = f"d/{uid}/data"
     bucket_contents = s3.list_objects(
-        Bucket=BUCKET_NAME,
+        Bucket=bucket_name,
         Prefix=data_path,
     )["Contents"]
 
@@ -336,13 +334,13 @@ def get_data_from_s3(file_name, uid):
         obj_filename = obj.get("Key").split("/")[-1]
         if obj_filename == file_name:
             if obj_filename.split(".")[-1] in ["png", "jpg", "jpeg"]:
-                binary_content = s3.get_object(Bucket=BUCKET_NAME, Key=obj["Key"])[
+                binary_content = s3.get_object(Bucket=bucket_name, Key=obj["Key"])[
                     "Body"
                 ].read()
                 file_content = base64.b64encode(binary_content).decode("utf-8")
             else:
                 file_content = (
-                    s3.get_object(Bucket=BUCKET_NAME, Key=obj["Key"])["Body"]
+                    s3.get_object(Bucket=bucket_name, Key=obj["Key"])["Body"]
                     .read()
                     .decode("utf-8")
                 )
@@ -351,12 +349,12 @@ def get_data_from_s3(file_name, uid):
     return None
 
 
-def get_s3_proc(proc_name: str, uid: str):
+def get_s3_proc(proc_name: str, uid: str, bucket_name: str):
     """Fetches a process file from S3"""
     try:
         s3 = boto3.client("s3")
         proc_s3_path = f"d/{uid}/{PROC_DIR}"
-        bucket_contents = s3.list_objects(Bucket=BUCKET_NAME, Prefix=proc_s3_path)[
+        bucket_contents = s3.list_objects(Bucket=bucket_name, Prefix=proc_s3_path)[
             "Contents"
         ]
 
@@ -364,12 +362,14 @@ def get_s3_proc(proc_name: str, uid: str):
         for obj in bucket_contents:
             s3_proc = obj.get("Key").split("/")[-1].split(".")[0]
             if s3_proc == proc_name:
-                file_content = s3.get_object(Bucket=BUCKET_NAME, Key=obj["Key"])[
+                file_content = s3.get_object(Bucket=bucket_name, Key=obj["Key"])[
                     "Body"
                 ].read()
                 if file_content:
                     try:
-                        proc_contents = parse_graph(s3_proc, yaml.safe_load(file_content))
+                        proc_contents = parse_graph(
+                            s3_proc, yaml.safe_load(file_content)
+                        )
                         proc = BP(proc_contents, uid)
                     except Exception as e:
                         raise GraphParseError(message=e)
@@ -666,7 +666,7 @@ def __construct_step_dict(
             "input": step_input,
             "api_key": node.get("data").get("apiKey"),
             "engine_name": node.get("data").get("engineName"),
-            "model_name": node.get("data").get("modelName")
+            "model_name": node.get("data").get("modelName"),
         }
 
         if data_output_name:

@@ -60,7 +60,6 @@ import krt
 logger = logging.getLogger(__name__)
 
 # Literal constants
-BUCKET_NAME = settings.user_artifact_bucket
 TNE_PACKAGE_PATH = "./tne-0.0.1-py3-none-any.whl"
 image_models = ["dall-e-3"]
 
@@ -158,7 +157,7 @@ async def vega_chart(
 ) -> Optional[str]:
     retry_no = 0
     chart = None
-    plot_chart_proc = get_s3_proc("Plot Chart", "SYSTEM")
+    plot_chart_proc = get_s3_proc("Plot Chart", "SYSTEM", settings.user_artifact_bucket)
     proc_step = plot_chart_proc.steps[0]
     while retry_no < max_retries and not chart:
         tools = [json.loads(proc_step.tool_json)]
@@ -187,7 +186,7 @@ async def vega_chart(
             try:
                 func_namespace = {}
                 func_name, func_code = get_python_s3_module(
-                    function_call.name, "SYSTEM"
+                    function_call.name, "SYSTEM", settings.user_artifact_bucket
                 )
                 exec(func_code, func_namespace)
 
@@ -335,9 +334,9 @@ class BPAgent:
 
                     # Generate a unique filename based off of the image contents
                     data_s3_path = f"d/{uid}/data"
-                    data_filenames = get_s3_ls(BUCKET_NAME, data_s3_path)
+                    data_filenames = get_s3_ls(settings.user_artifact_bucket, data_s3_path)
 
-                    assistant_proc = get_s3_proc("Assistant", "SYSTEM")
+                    assistant_proc = get_s3_proc("Assistant", "SYSTEM", settings.user_artifact_bucket)
                     filename_gen_manifest = assistant_proc.manifests.get(
                         "imageFilename"
                     )
@@ -363,7 +362,7 @@ class BPAgent:
                     response = requests.get(img_url)
                     if response.status_code == 200:
                         img_s3_url = await upload_to_s3(
-                            img_filename, response.content, uid
+                            img_filename, response.content, uid, settings.user_artifact_bucket
                         )
                         step_output.text = f"![]({img_s3_url})"
                         step_output.data = base64.b64encode(response.content).decode(
@@ -522,7 +521,7 @@ class BPAgent:
         # Nested BP step
         elif proc_step.type == "bp":
             try:
-                sub_proc = get_s3_proc(proc_step.name, uid)
+                sub_proc = get_s3_proc(proc_step.name, uid, settings.user_artifact_bucket)
             except Exception as e:
                 raise IOError(f"Could not find sub-process: {proc_step.name}")
             try:
@@ -606,7 +605,7 @@ class BPAgent:
         if sources and sources[0] != "none":
             for data_source in sources:
                 data_str = None
-                data = get_data_from_s3(data_source, uid)
+                data = get_data_from_s3(data_source, uid, settings.user_artifact_bucket)
                 if type(data) is dict:
                     data = data.get("data")
 
@@ -655,7 +654,7 @@ class BPAgent:
                 # Hack to allow both manifests and processes
                 proc = proc_step.parent
             else:
-                proc = get_s3_proc("Assistant", "SYSTEM")
+                proc = get_s3_proc("Assistant", "SYSTEM", settings.user_artifact_bucket)
 
             # Create session (single-use) and add question
             session = ChatSession(
@@ -678,7 +677,7 @@ class BPAgent:
                         if proc_step.debug_output_name and proc_step.manifest:
                             full_prompt = f"{manifest.get('prompt')}\n\n{question}"
                             _ = await upload_to_s3(
-                                proc_step.debug_output_name, full_prompt, uid
+                                proc_step.debug_output_name, full_prompt, uid, settings.user_artifact_bucket
                             )
                     except Exception as e:
                         raise IOError(
@@ -749,7 +748,7 @@ class BPAgent:
                     try:
                         if uid == "SYSTEM":
                             show_description = False
-                        user_proc = get_s3_proc(proc_name, uid)
+                        user_proc = get_s3_proc(proc_name, uid, settings.user_artifact_bucket)
                     except (NoCredentialsError, PartialCredentialsError) as ce:
                         aws_token_error = True
                         async for chunk in generate_stream(
@@ -771,7 +770,7 @@ class BPAgent:
                 else:
                     dummy_manifest = None
                     try:
-                        dummy_proc = get_s3_proc("Assistant", "SYSTEM")
+                        dummy_proc = get_s3_proc("Assistant", "SYSTEM", settings.user_artifact_bucket)
                         dummy_manifest = dummy_proc.manifests.get("chat")
                     except Exception as e:
                         async for chunk in generate_stream(
@@ -781,11 +780,11 @@ class BPAgent:
 
                     if not dummy_manifest:
                         raise IOError(
-                            f"Could not access [Assistant] manifest from bucket {BUCKET_NAME}. Check AWS connection."
+                            f"Could not access [Assistant] manifest from bucket {settings.user_artifact_bucket}. Check AWS connection."
                         )
 
                     proc_s3_path = f"d/{uid}/proc"
-                    proc_bucket_contents = get_s3_dir_summary(BUCKET_NAME, proc_s3_path)
+                    proc_bucket_contents = get_s3_dir_summary(settings.user_artifact_bucket, proc_s3_path)
 
                     dummy_manifest["prompt"] = (
                         parse_s3_proc_data_no_regex(proc_bucket_contents)
@@ -823,7 +822,7 @@ class BPAgent:
                     if match:
                         proc_name = match.group(1).strip()
                     if proc_name:
-                        user_proc = get_s3_proc(proc_name, uid)
+                        user_proc = get_s3_proc(proc_name, uid, settings.user_artifact_bucket)
                         # Could not find a matching process
                         if not user_proc:
                             raise ValueError(
@@ -1071,12 +1070,12 @@ class BPAgent:
                                 or data_filename.endswith(".jpeg")
                             ):
                                 await upload_to_s3(
-                                    s.data_output_name, step_output.data, uid
+                                    s.data_output_name, step_output.data, uid, settings.user_artifact_bucket
                                 )
                             else:
                                 if proc_step.type != "code_generation":
                                     await upload_to_s3(
-                                        s.data_output_name, step_output.text, uid
+                                        s.data_output_name, step_output.text, uid, settings.user_artifact_bucket
                                     )
                             yield FlowLog(
                                 message=f"[BPAgent][run_proc] Uploaded {s.data_output_name} to S3..."
@@ -1490,7 +1489,7 @@ class BPAgent:
         data_context_buffer += f"PROCESS_INPUT: {step_input}"
 
         # API call to the LLM for code generation
-        code_gen_proc = get_s3_proc("CodeGen", "SYSTEM")
+        code_gen_proc = get_s3_proc("CodeGen", "SYSTEM", settings.user_artifact_bucket)
         code_gen_manifest = code_gen_proc.manifests.get("codeGenerator")
         if proc_step.model_name:
             code_gen_manifest["model"] = {
@@ -1561,7 +1560,7 @@ class BPAgent:
                 yield str(message)
 
         if proc_step.data_output_name:
-            await upload_to_s3(proc_step.data_output_name, formatted_code, uid)
+            await upload_to_s3(proc_step.data_output_name, formatted_code, uid, settings.user_artifact_bucket)
 
         ret = collected_messages[-1]
         if type(ret) is pd.DataFrame:
@@ -1580,7 +1579,7 @@ class BPAgent:
         uid: str,
         session_id: str = "",
     ) -> Any:
-        module_name, module_code = fetch_python_module(proc_step.name, uid)
+        module_name, module_code = fetch_python_module(proc_step.name, uid, settings.user_artifact_bucket)
 
         # Step input is available through special variable PROCESS_INPUT
         namespace = {"PROCESS_INPUT": step_input}
@@ -1616,7 +1615,7 @@ class BPAgent:
         if proc_step.sql_queries:
             # Construct the function scope for running SQL
             sql_namespace = {}
-            run_sql_name, run_sql_code = get_python_s3_module("run_sql", "SYSTEM")
+            run_sql_name, run_sql_code = get_python_s3_module("run_sql", "SYSTEM", settings.user_artifact_bucket)
             exec(run_sql_code, sql_namespace)
 
             # Iteratively run each SQL query
@@ -1639,7 +1638,7 @@ class BPAgent:
         try:
             # Load Python code from S3
             proc_step.name = proc_step.name.split(".")[0]
-            module_name, module_code = get_python_s3_module(proc_step.name, uid)
+            module_name, module_code = get_python_s3_module(proc_step.name, uid, settings.user_artifact_bucket)
             if re.search(r"^FEATURE_FLAG_KNATIVE_RUNTIME = True$", module_code, re.M):
                 # Add kwargs from the step graph
                 kwargs = proc_step.kwargs
