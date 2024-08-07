@@ -774,7 +774,7 @@ class BPAgent:
                         dummy_manifest = dummy_proc.manifests.get("chat")
                     except Exception as e:
                         async for chunk in generate_stream(
-                            f"Error pulling process [Assistant] from S3. Please check your AWS credentials."
+                            f"Received error while pulling expert [Assistant]: {e}"
                         ):
                             yield chunk
 
