@@ -125,15 +125,17 @@ def update_data_context_buffer(session, file_name, data_context_buffer):
 
     return data_context_buffer
 
+
 def execute_temp_file(file_path: str) -> dict:
     return runpy.run_path(file_path)
 
 
 def save_code_to_temp_file(code: str) -> str:
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".py")
-    with open(temp_file.name, 'w') as f:
+    with open(temp_file.name, "w") as f:
         f.write(code)
     return temp_file.name
+
 
 async def collect_messages(generator: AsyncGenerator):
     """Collect all messages from an async generator into a list."""
@@ -779,7 +781,7 @@ class BPAgent:
 
                     if not dummy_manifest:
                         raise IOError(
-                            "Could not access [Assistant] manifest. Check your connection to the AWS servers."
+                            f"Could not access [Assistant] manifest from bucket {BUCKET_NAME}. Check AWS connection."
                         )
 
                     proc_s3_path = f"d/{uid}/proc"
@@ -1421,7 +1423,9 @@ class BPAgent:
                 yield "\n"
             raise e
 
-    async def __run_llm_python_code(self, llm_code, step, step_input, uid, retry_no, session_id) -> AsyncGenerator:
+    async def __run_llm_python_code(
+        self, llm_code, step, step_input, uid, retry_no, session_id
+    ) -> AsyncGenerator:
         """Code interpreter module; allow the LLMs to generate and run Python code on the data within the BP."""
         if llm_code:
             # Save the LLM-generated code to a temporary file
@@ -1429,7 +1433,9 @@ class BPAgent:
 
             # Install the TNE Python SDK into the code execution environment
             try:
-                subprocess.check_call([sys.executable, "-m", "pip", "install", TNE_PACKAGE_PATH])
+                subprocess.check_call(
+                    [sys.executable, "-m", "pip", "install", TNE_PACKAGE_PATH]
+                )
             except subprocess.CalledProcessError as e:
                 raise e
 
@@ -1438,8 +1444,8 @@ class BPAgent:
                 namespace = execute_temp_file(temp_file_path)
 
                 # Access the results from the namespace
-                df_last_3_months = namespace.get('df_last_3_months')
-                result = namespace.get('result')
+                df_last_3_months = namespace.get("df_last_3_months")
+                result = namespace.get("result")
 
                 if df_last_3_months is not None:
                     logger.debug(f"df_last_3_months: {df_last_3_months.head()}")
@@ -1525,7 +1531,11 @@ class BPAgent:
             else:
                 formatted_code = parsed_resp
                 formatted_code = f"# USER QUERY: {step_input}\n\n{formatted_code}"
-        elif type(parsed_resp) is FlowLog and parsed_resp.message == "[Assistant][call_llm] Regex pattern ``` match not detected. Returning unfiltered output.":
+        elif (
+            type(parsed_resp) is FlowLog
+            and parsed_resp.message
+            == "[Assistant][call_llm] Regex pattern ``` match not detected. Returning unfiltered output."
+        ):
             formatted_code = llm_resp
             formatted_code = f"# USER QUERY: {step_input}\n\n{formatted_code}"
         # The LLM didn't generate code; likely because of a conversational, non-data question
