@@ -1,6 +1,7 @@
 import os
 import json
 from typing import Dict, List, Optional
+from orchestration.settings import settings
 
 from orchestration.db_utils import PostgresConnector, RajkumarFormatter
 
@@ -9,8 +10,6 @@ from orchestration.db_utils import PostgresConnector, RajkumarFormatter
 # sys.path.append(os.path.join(os.path.dirname(__file__), "../../SlashTNE/src"))
 
 from slashgpt.chat_config_with_manifests import ChatConfigWithManifests
-
-BUCKET_NAME = "bp-authoring-files"
 
 
 class MalformedDataError(Exception):
@@ -63,7 +62,7 @@ class BP:
             base_path="", path_manifests=self.manifests_path
         )
         self.manifests = self.slashgpt_config.load_manifests_s3(
-            BUCKET_NAME, manifest_s3_path
+            settings.user_artifact_bucket, manifest_s3_path
         )
 
         # Load data sources
