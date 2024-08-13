@@ -1474,7 +1474,7 @@ class BPAgent:
         data_context_buffer = f"UID: {uid}\nBUCKET: {settings.user_artifact_bucket}\n"
         session = TNE(uid, settings.user_artifact_bucket)
 
-        # a. Deterministically connected data sources from UI
+        # a. Inject data from graph UI
         for s in proc_step.data_sources:
             data_context_buffer = update_data_context_buffer(
                 session, s, data_context_buffer
