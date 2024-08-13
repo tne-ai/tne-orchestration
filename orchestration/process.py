@@ -1471,8 +1471,8 @@ class BPAgent:
         llm_resp = None
 
         # 1. Use TNE Python SDK package to inject relevant data into LLM prompt
-        data_context_buffer = f"UID: {uid}\n"
-        session = TNE(uid)
+        data_context_buffer = f"UID: {uid}\nBUCKET: {settings.user_artifact_bucket}\n"
+        session = TNE(uid, settings.user_artifact_bucket)
 
         # a. Deterministically connected data sources from UI
         for s in proc_step.data_sources:
@@ -1669,7 +1669,7 @@ class BPAgent:
             if sources and sources[0] != "none":
                 for data_source in sources:
                     try:
-                        session = TNE(uid)
+                        session = TNE(uid, settings.user_artifact_bucket)
                         proc_step.data.update(
                             {
                                 data_source.split(".")[0].strip(): session.get_object(
