@@ -6,8 +6,9 @@ from orchestration.settings import settings
 from orchestration.db_utils import PostgresConnector, RajkumarFormatter
 
 # Uncomment below to use local SlashGPT
-# import sys
-# sys.path.append(os.path.join(os.path.dirname(__file__), "../../SlashTNE/src"))
+if settings.use_local_slashgpt:
+    import sys
+    sys.path.append(os.path.join(os.path.dirname(__file__), "../../SlashTNE/src"))
 
 from slashgpt.chat_config_with_manifests import ChatConfigWithManifests
 

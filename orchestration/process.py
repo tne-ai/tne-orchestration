@@ -47,15 +47,14 @@ from orchestration.v2.api.util import (
     anns_response_from_json_str,
 )
 from pydantic import BaseModel
-from slashgpt.chat_session import ChatSession
 from tabulate import tabulate
 from tne.TNE import TNE
 
 import krt
 
-# Uncomment below to use local SlashGPT
-# sys.path.append(os.path.join(os.path.dirname(__file__), "../../SlashTNE/src"))
-# from slashgpt.chat_session import ChatSession
+if settings.use_local_slashgpt:
+    sys.path.append(os.path.join(os.path.dirname(__file__), "../../SlashTNE/src"))
+from slashgpt.chat_session import ChatSession
 
 logger = logging.getLogger(__name__)
 

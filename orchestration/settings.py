@@ -22,6 +22,11 @@ class Setting(BaseSettings):
         default="http://msgapi-svc.default.svc.cluster.local",
         description="SageMaker Message API endpoint"
     )
+    use_local_slashgpt: bool = Field(
+        required=False,
+        default=False,
+        description="Use local installation of SlashGPT"
+    )
 
 
 settings = Setting()
