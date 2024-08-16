@@ -590,7 +590,9 @@ class BPAgent:
         else:
             manifest = copy.deepcopy(manifest)
 
-        ##
+        # Set random seed in manifest
+        manifest["seed"] = settings.random_seed
+
         # Parse through data sources. There's currently three types supported:
         #     1. PostgreSQL database - pull the schema and prepend it to the prompt
         #     2. CSV file - load in the file as a pd.DataFrame, prepend the df.head() to the prompt

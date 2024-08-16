@@ -27,6 +27,10 @@ class Setting(BaseSettings):
         default=False,
         description="Use local installation of SlashGPT"
     )
-
+    random_seed: int = Field(
+        required=False,
+        default=12345678,
+        description="Random seed"
+    )
 
 settings = Setting()
