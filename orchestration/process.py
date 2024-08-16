@@ -226,7 +226,7 @@ class BPAgent:
         session_id,
         is_spinning,
         show_description=True,
-        history: Optional[List[dict]] = None,
+        history: Optional[List[Dict[str, str]]] = None,
     ) -> AsyncGenerator:
         tracer = trace.get_tracer(__name__)
         fun_name = "BPAgent.run_step"
@@ -257,7 +257,7 @@ class BPAgent:
         uid,
         session_id,
         show_description=True,
-        history: Optional[List[dict]] = None,
+        history: Optional[List[Dict[str, str]]] = None,
     ) -> AsyncGenerator:
         # TEMPORARY: route all tne-branded models to groq
         if proc_step.manifest:
@@ -595,7 +595,7 @@ class BPAgent:
         manifest: Dict = None,
         session_id: str = "",
         use_alias: Optional[bool] = False,
-        history: Optional[List[dict]] = False
+        history: Optional[List[Dict[str, str]]] = False,
     ) -> AsyncGenerator:
         """Call the LLM (more documentation forthcoming)."""
         if use_alias:
@@ -684,7 +684,11 @@ class BPAgent:
                 # TODO(lucas): Insert history HERE
                 if history:
                     for msg in history:
-                        session.append_message(role=msg.get("role"), message=msg.get("content"), preset=False)
+                        session.append_message(
+                            role=msg.get("role"),
+                            message=msg.get("content"),
+                            preset=False,
+                        )
                 session.append_user_question(session.manifest.format_question(question))
                 yield FlowLog(
                     message=f"[Assistant][call_llm] Received question: {session.manifest.format_question(question)}"
@@ -752,7 +756,7 @@ class BPAgent:
         question,
         uid: str,
         session_id: str = "",
-        history: Optional[List[dict]] = None,
+        history: Optional[List[Dict[str, str]]] = None,
     ) -> AsyncGenerator:
         """Manages LLM inference (more documentation forthcoming)."""
 
@@ -913,7 +917,7 @@ class BPAgent:
         question: str,
         proc: BP,
         uid: str,
-        history: Optional[List[dict]] = None,
+        history: Optional[List[Dict[str, str]]] = None,
         is_sub_proc: bool = False,
         step_no: int = 0,
         session_id: str = "",
@@ -943,7 +947,7 @@ class BPAgent:
         question: str,
         proc: BP,
         uid: str,
-        history: Optional[List[dict]] = None,
+        history: Optional[List[Dict[str, str]]] = None,
         is_sub_proc: bool = False,
         step_no: int = 0,
         session_id: str = "",
@@ -1216,7 +1220,7 @@ class BPAgent:
         proc_step: ProcessStep,
         uid: str,
         session_id: str = "",
-        history: Optional[List[dict]] = None,
+        history: Optional[List[Dict[str, str]]] = None,
     ) -> AsyncGenerator:
         retry_no = 0
         llm_resp = None
@@ -1516,7 +1520,7 @@ class BPAgent:
         proc_step: ProcessStep,
         uid: str,
         session_id: str = "",
-        history: Optional[List[dict]] = None,
+        history: Optional[List[Dict[str, str]]] = None,
     ) -> AsyncGenerator:
         """Generate and run Python code that operates on DataFrames"""
         # Generate the code
