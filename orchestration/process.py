@@ -15,7 +15,7 @@ import sys
 import time
 import runpy
 from io import StringIO
-from typing import Any, Dict, Union, Tuple, Optional, AsyncGenerator
+from typing import Any, Dict, Union, List, Optional, AsyncGenerator
 
 import boto3
 import pandas as pd
@@ -226,6 +226,7 @@ class BPAgent:
         session_id,
         is_spinning,
         show_description=True,
+        history: Optional[List[dict]] = None,
     ) -> AsyncGenerator:
         tracer = trace.get_tracer(__name__)
         fun_name = "BPAgent.run_step"
@@ -241,8 +242,8 @@ class BPAgent:
                 dispatched_input,
                 uid,
                 session_id,
-                is_spinning,
-                show_description=show_description,
+                show_description,
+                history=history,
             ):
                 yield message
 
@@ -255,8 +256,8 @@ class BPAgent:
         dispatched_input,
         uid,
         session_id,
-        is_spinning,
         show_description=True,
+        history: Optional[List[dict]] = None,
     ) -> AsyncGenerator:
         # TEMPORARY: route all tne-branded models to groq
         if proc_step.manifest:
@@ -296,7 +297,7 @@ class BPAgent:
                 collected_messages = []
                 try:
                     async for message in self.__run_llm_step(
-                        step_input, proc_step, uid
+                        step_input, proc_step, uid, history=history
                     ):
                         if type(message) is not FlowLog:
                             collected_messages.append(message)
@@ -322,7 +323,10 @@ class BPAgent:
             elif proc_step.manifest.get("model").get("model_name") in image_models:
                 try:
                     async for message in self.__run_llm_step(
-                        step_input, proc_step, uid
+                        step_input,
+                        proc_step,
+                        uid,
+                        history=history,
                     ):
                         if type(message) is FlowLog:
                             yield message
@@ -333,9 +337,13 @@ class BPAgent:
 
                     # Generate a unique filename based off of the image contents
                     data_s3_path = f"d/{uid}/data"
-                    data_filenames = get_s3_ls(settings.user_artifact_bucket, data_s3_path)
+                    data_filenames = get_s3_ls(
+                        settings.user_artifact_bucket, data_s3_path
+                    )
 
-                    assistant_proc = get_s3_proc("Assistant", "SYSTEM", settings.user_artifact_bucket)
+                    assistant_proc = get_s3_proc(
+                        "Assistant", "SYSTEM", settings.user_artifact_bucket
+                    )
                     filename_gen_manifest = assistant_proc.manifests.get(
                         "imageFilename"
                     )
@@ -361,7 +369,10 @@ class BPAgent:
                     response = requests.get(img_url)
                     if response.status_code == 200:
                         img_s3_url = await upload_to_s3(
-                            img_filename, response.content, uid, settings.user_artifact_bucket
+                            img_filename,
+                            response.content,
+                            uid,
+                            settings.user_artifact_bucket,
                         )
                         step_output.text = f"![]({img_s3_url})"
                         step_output.data = base64.b64encode(response.content).decode(
@@ -380,7 +391,7 @@ class BPAgent:
             else:
                 try:
                     async for message in self.__run_llm_step(
-                        step_input, proc_step, uid
+                        step_input, proc_step, uid, history=history
                     ):
                         if type(message) is not FlowLog:
                             llm_step_messages.append(message)
@@ -510,7 +521,9 @@ class BPAgent:
 
         # Generate + run Python code
         elif proc_step.type == "code_generation":
-            async for message in self.__run_llm_python_step(step_input, proc_step, uid):
+            async for message in self.__run_llm_python_step(
+                step_input, proc_step, uid, history=history
+            ):
                 if type(message) is LLMResponse:
                     step_output = message
                 else:
@@ -520,7 +533,9 @@ class BPAgent:
         # Nested BP step
         elif proc_step.type == "bp":
             try:
-                sub_proc = get_s3_proc(proc_step.name, uid, settings.user_artifact_bucket)
+                sub_proc = get_s3_proc(
+                    proc_step.name, uid, settings.user_artifact_bucket
+                )
             except Exception as e:
                 raise IOError(f"Could not find sub-process: {proc_step.name}")
             try:
@@ -530,6 +545,7 @@ class BPAgent:
                     uid,
                     True,
                     session_id=session_id,
+                    history=history,
                 ):
                     if type(message) is LLMResponse:
                         step_output = message
@@ -579,6 +595,7 @@ class BPAgent:
         manifest: Dict = None,
         session_id: str = "",
         use_alias: Optional[bool] = False,
+        history: Optional[List[dict]] = False
     ) -> AsyncGenerator:
         """Call the LLM (more documentation forthcoming)."""
         if use_alias:
@@ -664,6 +681,10 @@ class BPAgent:
                 agent_name=proc.server_config.agent_name,
             )
             if not is_base64_image(question):
+                # TODO(lucas): Insert history HERE
+                if history:
+                    for msg in history:
+                        session.append_message(role=msg.get("role"), message=msg.get("content"), preset=False)
                 session.append_user_question(session.manifest.format_question(question))
                 yield FlowLog(
                     message=f"[Assistant][call_llm] Received question: {session.manifest.format_question(question)}"
@@ -678,7 +699,10 @@ class BPAgent:
                         if proc_step.debug_output_name and proc_step.manifest:
                             full_prompt = f"{manifest.get('prompt')}\n\n{question}"
                             _ = await upload_to_s3(
-                                proc_step.debug_output_name, full_prompt, uid, settings.user_artifact_bucket
+                                proc_step.debug_output_name,
+                                full_prompt,
+                                uid,
+                                settings.user_artifact_bucket,
                             )
                     except Exception as e:
                         raise IOError(
@@ -728,6 +752,7 @@ class BPAgent:
         question,
         uid: str,
         session_id: str = "",
+        history: Optional[List[dict]] = None,
     ) -> AsyncGenerator:
         """Manages LLM inference (more documentation forthcoming)."""
 
@@ -749,7 +774,9 @@ class BPAgent:
                     try:
                         if uid == "SYSTEM":
                             show_description = False
-                        user_proc = get_s3_proc(proc_name, uid, settings.user_artifact_bucket)
+                        user_proc = get_s3_proc(
+                            proc_name, uid, settings.user_artifact_bucket
+                        )
                     except (NoCredentialsError, PartialCredentialsError) as ce:
                         aws_token_error = True
                         async for chunk in generate_stream(
@@ -771,7 +798,9 @@ class BPAgent:
                 else:
                     dummy_manifest = None
                     try:
-                        dummy_proc = get_s3_proc("Assistant", "SYSTEM", settings.user_artifact_bucket)
+                        dummy_proc = get_s3_proc(
+                            "Assistant", "SYSTEM", settings.user_artifact_bucket
+                        )
                         dummy_manifest = dummy_proc.manifests.get("chat")
                     except Exception as e:
                         async for chunk in generate_stream(
@@ -785,7 +814,9 @@ class BPAgent:
                         )
 
                     proc_s3_path = f"d/{uid}/proc"
-                    proc_bucket_contents = get_s3_dir_summary(settings.user_artifact_bucket, proc_s3_path)
+                    proc_bucket_contents = get_s3_dir_summary(
+                        settings.user_artifact_bucket, proc_s3_path
+                    )
 
                     dummy_manifest["prompt"] = (
                         parse_s3_proc_data_no_regex(proc_bucket_contents)
@@ -823,7 +854,9 @@ class BPAgent:
                     if match:
                         proc_name = match.group(1).strip()
                     if proc_name:
-                        user_proc = get_s3_proc(proc_name, uid, settings.user_artifact_bucket)
+                        user_proc = get_s3_proc(
+                            proc_name, uid, settings.user_artifact_bucket
+                        )
                         # Could not find a matching process
                         if not user_proc:
                             raise ValueError(
@@ -848,6 +881,7 @@ class BPAgent:
                         question,
                         user_proc,
                         uid,
+                        history=history,
                         session_id=session_id,
                         show_description=show_description,
                     ):
@@ -879,6 +913,7 @@ class BPAgent:
         question: str,
         proc: BP,
         uid: str,
+        history: Optional[List[dict]] = None,
         is_sub_proc: bool = False,
         step_no: int = 0,
         session_id: str = "",
@@ -897,6 +932,7 @@ class BPAgent:
                 is_sub_proc=is_sub_proc,
                 step_no=step_no,
                 session_id=session_id,
+                history=history,
                 show_description=show_description,
             ):
                 yield message
@@ -907,6 +943,7 @@ class BPAgent:
         question: str,
         proc: BP,
         uid: str,
+        history: Optional[List[dict]] = None,
         is_sub_proc: bool = False,
         step_no: int = 0,
         session_id: str = "",
@@ -965,6 +1002,7 @@ class BPAgent:
                         session_id,
                         is_spinning,
                         show_description,
+                        history=history,
                     ):
                         if type(message) is tuple:
                             if type(message[0]) is str:
@@ -1071,12 +1109,18 @@ class BPAgent:
                                 or data_filename.endswith(".jpeg")
                             ):
                                 await upload_to_s3(
-                                    s.data_output_name, step_output.data, uid, settings.user_artifact_bucket
+                                    s.data_output_name,
+                                    step_output.data,
+                                    uid,
+                                    settings.user_artifact_bucket,
                                 )
                             else:
                                 if proc_step.type != "code_generation":
                                     await upload_to_s3(
-                                        s.data_output_name, step_output.text, uid, settings.user_artifact_bucket
+                                        s.data_output_name,
+                                        step_output.text,
+                                        uid,
+                                        settings.user_artifact_bucket,
                                     )
                             yield FlowLog(
                                 message=f"[BPAgent][run_proc] Uploaded {s.data_output_name} to S3..."
@@ -1172,6 +1216,7 @@ class BPAgent:
         proc_step: ProcessStep,
         uid: str,
         session_id: str = "",
+        history: Optional[List[dict]] = None,
     ) -> AsyncGenerator:
         retry_no = 0
         llm_resp = None
@@ -1180,6 +1225,7 @@ class BPAgent:
             collected_messages = []
             try:
                 # FIXME(rakuto): Hack for TNE BigText Model routing. Dispatching to TNE models should be integrated into Slash-GPT.
+                # TODO(lucas): Chat history for hosted models
                 if proc_step.manifest:
                     if proc_step.manifest.get("model"):
                         model = proc_step.manifest.get("model")
@@ -1210,6 +1256,7 @@ class BPAgent:
                                 uid=uid,
                                 session_id=session_id,
                                 use_alias=False,
+                                history=history,
                             ):
                                 if type(message) is not FlowLog:
                                     collected_messages.append(message)
@@ -1464,7 +1511,12 @@ class BPAgent:
             yield result
 
     async def __run_llm_python_step(
-        self, step_input: Any, proc_step: ProcessStep, uid: str, session_id: str = ""
+        self,
+        step_input: Any,
+        proc_step: ProcessStep,
+        uid: str,
+        session_id: str = "",
+        history: Optional[List[dict]] = None,
     ) -> AsyncGenerator:
         """Generate and run Python code that operates on DataFrames"""
         # Generate the code
@@ -1510,6 +1562,7 @@ class BPAgent:
                 question=step_input,
                 proc_step=None,
                 manifest=code_gen_manifest,
+                history=history,
                 uid=uid,
                 session_id=session_id,
                 use_alias=False,
@@ -1561,7 +1614,12 @@ class BPAgent:
                 yield str(message)
 
         if proc_step.data_output_name:
-            await upload_to_s3(proc_step.data_output_name, formatted_code, uid, settings.user_artifact_bucket)
+            await upload_to_s3(
+                proc_step.data_output_name,
+                formatted_code,
+                uid,
+                settings.user_artifact_bucket,
+            )
 
         ret = collected_messages[-1]
         if type(ret) is pd.DataFrame:
@@ -1580,7 +1638,9 @@ class BPAgent:
         uid: str,
         session_id: str = "",
     ) -> Any:
-        module_name, module_code = fetch_python_module(proc_step.name, uid, settings.user_artifact_bucket)
+        module_name, module_code = fetch_python_module(
+            proc_step.name, uid, settings.user_artifact_bucket
+        )
 
         # Step input is available through special variable PROCESS_INPUT
         namespace = {"PROCESS_INPUT": step_input}
@@ -1616,7 +1676,9 @@ class BPAgent:
         if proc_step.sql_queries:
             # Construct the function scope for running SQL
             sql_namespace = {}
-            run_sql_name, run_sql_code = get_python_s3_module("run_sql", "SYSTEM", settings.user_artifact_bucket)
+            run_sql_name, run_sql_code = get_python_s3_module(
+                "run_sql", "SYSTEM", settings.user_artifact_bucket
+            )
             exec(run_sql_code, sql_namespace)
 
             # Iteratively run each SQL query
@@ -1639,7 +1701,9 @@ class BPAgent:
         try:
             # Load Python code from S3
             proc_step.name = proc_step.name.split(".")[0]
-            module_name, module_code = get_python_s3_module(proc_step.name, uid, settings.user_artifact_bucket)
+            module_name, module_code = get_python_s3_module(
+                proc_step.name, uid, settings.user_artifact_bucket
+            )
             if re.search(r"^FEATURE_FLAG_KNATIVE_RUNTIME = True$", module_code, re.M):
                 # Add kwargs from the step graph
                 kwargs = proc_step.kwargs
