@@ -218,6 +218,7 @@ class ProcessStep:
         self.api_key = proc_step.get("api_key")
         self.model_name = proc_step.get("model_name")
         self.engine_name = proc_step.get("engine_name")
+        self.use_user_query = proc_step.get("use_user_query")
 
         # Function
         self.manifest = None

@@ -205,7 +205,6 @@ async def vega_chart(
 class BPAgent:
     def __init__(self, callback=None):
         self._callback = callback or self._noop
-        self.orig_question = ""
 
     def _noop(self, callback_type, data):
         pass
@@ -953,10 +952,10 @@ class BPAgent:
         session_id: str = "",
         show_description: bool = True,
     ) -> AsyncGenerator:
-        self.orig_question = question
         step_input = question
 
         # Cache input here for dispatched steps
+        orig_question = question
         dispatched_input = None
 
         # Error state
@@ -994,6 +993,9 @@ class BPAgent:
                         is_spinning = True
                         yield "```SET_IS_SPINNING```"
                         yield "\n"
+
+                if proc_step.use_user_query is True:
+                    step_input = f"[Context query: {orig_question}] [Current input: {step_input}]"
 
                 collected_messages = []
                 try:

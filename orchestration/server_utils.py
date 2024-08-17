@@ -573,6 +573,7 @@ def __construct_step_dict(
             "suppress_output": node.get("data").get("outputToCanvas"),
             "tool_json": node.get("data").get("toolJson"),
             "tool_code": node.get("data").get("toolCode"),
+            "use_user_query": node.get("data").get("useUserQuery"),
             "data_sources": data_sources,
             "input": step_input,
         }
@@ -667,6 +668,7 @@ def __construct_step_dict(
             "api_key": node.get("data").get("apiKey"),
             "engine_name": node.get("data").get("engineName"),
             "model_name": node.get("data").get("modelName"),
+            "use_user_query": node.get("data").get("useUserQuery")
         }
 
         if data_output_name:
