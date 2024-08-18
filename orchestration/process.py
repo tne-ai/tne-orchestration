@@ -62,8 +62,6 @@ logger = logging.getLogger(__name__)
 TNE_PACKAGE_PATH = "./tne-0.0.1-py3-none-any.whl"
 image_models = ["dall-e-3"]
 
-DATA_BUFFER_LENGTH = 2500
-
 smr_client = boto3.client("sagemaker-runtime")  # type: SageMakerRuntimeClient
 
 if platform.system() == "Darwin":
@@ -108,16 +106,10 @@ def update_data_context_buffer(session, file_name, data_context_buffer):
             case pd.DataFrame:
                 data_context_buffer += f"{file_name}: {data.head().to_string()}\n"
             case str:
-                if len(data) <= DATA_BUFFER_LENGTH:
-                    data_context_buffer += data
-                else:
-                    data_context_buffer += data[:DATA_BUFFER_LENGTH]
+                data_context_buffer += data
     except ValueError as ve:
         data = session.get_object_bytes(file_name).decode("utf-8")
-        if len(data) <= DATA_BUFFER_LENGTH:
-            data_context_buffer += data
-        else:
-            data_context_buffer += data[:DATA_BUFFER_LENGTH]
+        data_context_buffer += data
     except IOError as ie:
         return data_context_buffer
 
