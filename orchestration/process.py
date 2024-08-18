@@ -1534,9 +1534,6 @@ class BPAgent:
         # b. If step input exists, inject it into data_context_buffer
         if type(step_input) is pd.DataFrame:
             step_input = step_input.head().to_string()
-        elif type(step_input) is str:
-            if len(step_input) >= DATA_BUFFER_LENGTH:
-                step_input = step_input[:DATA_BUFFER_LENGTH]
         data_context_buffer += f"PROCESS_INPUT: {step_input}"
 
         # API call to the LLM for code generation
