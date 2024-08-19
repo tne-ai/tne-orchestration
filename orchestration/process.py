@@ -1489,15 +1489,7 @@ class BPAgent:
                 namespace = execute_temp_file(temp_file_path)
 
                 # Access the results from the namespace
-                df_last_3_months = namespace.get("df_last_3_months")
                 result = namespace.get("result")
-
-                if df_last_3_months is not None:
-                    logger.debug(f"df_last_3_months: {df_last_3_months.head()}")
-                    logger.debug(f"df_last_3_months shape: {df_last_3_months.shape}")
-                else:
-                    logger.error("df_last_3_months not found in namespace")
-
             except Exception as e:
                 logger.error(f"Exception occurred: {e}")
                 result = f"# USER QUERY: {step_input}\n\nresult = None"
