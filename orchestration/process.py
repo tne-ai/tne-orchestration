@@ -1492,7 +1492,7 @@ class BPAgent:
                 result = namespace.get("result")
             except Exception as e:
                 logger.error(f"Exception occurred: {e}")
-                result = f"# USER QUERY: {step_input}\n\nresult = None"
+                result = "result = None"
                 yield result
             finally:
                 # Clean up the temporary file
@@ -1567,20 +1567,17 @@ class BPAgent:
         if type(parsed_resp) is str:
             if "python" in parsed_resp:
                 formatted_code = parsed_resp.split("python\n")[1]
-                formatted_code = f"# USER QUERY: {step_input}\n\n{formatted_code}"
             else:
                 formatted_code = parsed_resp
-                formatted_code = f"# USER QUERY: {step_input}\n\n{formatted_code}"
         elif (
             type(parsed_resp) is FlowLog
             and parsed_resp.message
             == "[Assistant][call_llm] Regex pattern ``` match not detected. Returning unfiltered output."
         ):
             formatted_code = llm_resp
-            formatted_code = f"# USER QUERY: {step_input}\n\n{formatted_code}"
         # The LLM didn't generate code; likely because of a conversational, non-data question
         else:
-            formatted_code = f"# USER QUERY: {step_input}\n\nresult = 'None'"
+            formatted_code = "result = 'None'"
 
         # Error case
         if type(formatted_code) is FlowLog:
