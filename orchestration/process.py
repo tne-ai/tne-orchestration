@@ -214,7 +214,6 @@ class BPAgent:
         step_input,
         dispatched_input,
         uid,
-        session_id,
         is_spinning,
         show_description=True,
         history: Optional[List[Dict[str, str]]] = None,
@@ -232,7 +231,6 @@ class BPAgent:
                 step_input,
                 dispatched_input,
                 uid,
-                session_id,
                 show_description,
                 history=history,
             ):
@@ -246,7 +244,6 @@ class BPAgent:
         step_input,
         dispatched_input,
         uid,
-        session_id,
         show_description=True,
         history: Optional[List[Dict[str, str]]] = None,
     ) -> AsyncGenerator:
@@ -349,7 +346,6 @@ class BPAgent:
                             None,
                             uid,
                             filename_gen_manifest,
-                            session_id=session_id,
                         ):
                             if type(message) is not FlowLog:
                                 collected_messages.append(message)
@@ -535,7 +531,6 @@ class BPAgent:
                     sub_proc,
                     uid,
                     True,
-                    session_id=session_id,
                     history=history,
                 ):
                     if type(message) is LLMResponse:
@@ -548,7 +543,7 @@ class BPAgent:
         elif proc_step.type == "rag":
             rag_messages = []
             try:
-                async for message in self.__run_rag_step(step_input, proc_step, uid):
+                async for message in self.__run_rag_step(step_input, proc_step):
                     if type(message) is not FlowLog:
                         rag_messages.append(message)
                     yield message
@@ -561,7 +556,7 @@ class BPAgent:
             semantic_search_messages = []
             try:
                 async for message in self.__run_semantic_search_step(
-                    step_input, proc_step, uid
+                    step_input, proc_step,
                 ):
                     if type(message) is not FlowLog:
                         semantic_search_messages.append(message)
@@ -584,7 +579,6 @@ class BPAgent:
         proc_step: Optional[ProcessStep],
         uid: str,
         manifest: Dict = None,
-        session_id: str = "",
         use_alias: Optional[bool] = False,
         history: Optional[List[Dict[str, str]]] = False,
     ) -> AsyncGenerator:
@@ -746,7 +740,6 @@ class BPAgent:
         self,
         question,
         uid: str,
-        session_id: str = "",
         history: Optional[List[Dict[str, str]]] = None,
     ) -> AsyncGenerator:
         """Manages LLM inference (more documentation forthcoming)."""
@@ -826,7 +819,6 @@ class BPAgent:
                             None,
                             uid,
                             dummy_manifest,
-                            session_id=session_id,
                         ):
                             if type(message) is FlowLog:
                                 yield message
@@ -877,7 +869,6 @@ class BPAgent:
                         user_proc,
                         uid,
                         history=history,
-                        session_id=session_id,
                         show_description=show_description,
                     ):
                         if type(message) is tuple:
@@ -911,7 +902,6 @@ class BPAgent:
         history: Optional[List[Dict[str, str]]] = None,
         is_sub_proc: bool = False,
         step_no: int = 0,
-        session_id: str = "",
         show_description: bool = True,
     ) -> AsyncGenerator:
         tracer = trace.get_tracer(__name__)
@@ -926,7 +916,6 @@ class BPAgent:
                 uid,
                 is_sub_proc=is_sub_proc,
                 step_no=step_no,
-                session_id=session_id,
                 history=history,
                 show_description=show_description,
             ):
@@ -941,7 +930,6 @@ class BPAgent:
         history: Optional[List[Dict[str, str]]] = None,
         is_sub_proc: bool = False,
         step_no: int = 0,
-        session_id: str = "",
         show_description: bool = True,
     ) -> AsyncGenerator:
         step_input = question
@@ -997,7 +985,6 @@ class BPAgent:
                         step_input,
                         dispatched_input,
                         uid,
-                        session_id,
                         is_spinning,
                         show_description,
                         history=history,
@@ -1047,7 +1034,6 @@ class BPAgent:
                                 step_input,
                                 dispatched_input,
                                 uid,
-                                session_id,
                                 is_spinning,
                             )
                         )
@@ -1213,7 +1199,6 @@ class BPAgent:
         step_input: Union[str, pd.DataFrame],
         proc_step: ProcessStep,
         uid: str,
-        session_id: str = "",
         history: Optional[List[Dict[str, str]]] = None,
     ) -> AsyncGenerator:
         retry_no = 0
@@ -1252,7 +1237,6 @@ class BPAgent:
                                 question=step_input,
                                 proc_step=proc_step,
                                 uid=uid,
-                                session_id=session_id,
                                 use_alias=False,
                                 history=history,
                             ):
@@ -1265,7 +1249,7 @@ class BPAgent:
                 raise e
 
     async def __run_rag_step(
-        self, step_input: str, proc_step: ProcessStep, uid: str, session_id: str = ""
+        self, step_input: str, proc_step: ProcessStep,
     ) -> AsyncGenerator:
         # Create a RagRequest from the step input
         if proc_step.rag_db_name:
@@ -1395,7 +1379,7 @@ class BPAgent:
             raise e
 
     async def __run_semantic_search_step(
-        self, step_input: str, proc_step: ProcessStep, uid: str, session_id: str = ""
+        self, step_input: str, proc_step: ProcessStep,
     ) -> AsyncGenerator:
         # Create a RagRequest from the step input
         configs = {}
@@ -1469,7 +1453,7 @@ class BPAgent:
             raise e
 
     async def __run_llm_python_code(
-        self, llm_code, step, step_input, uid, retry_no, session_id
+        self, llm_code
     ) -> AsyncGenerator:
         """Code interpreter module; allow the LLMs to generate and run Python code on the data within the BP."""
         if llm_code:
@@ -1505,7 +1489,6 @@ class BPAgent:
         step_input: Any,
         proc_step: ProcessStep,
         uid: str,
-        session_id: str = "",
         history: Optional[List[Dict[str, str]]] = None,
     ) -> AsyncGenerator:
         """Generate and run Python code that operates on DataFrames"""
@@ -1551,7 +1534,6 @@ class BPAgent:
                 manifest=code_gen_manifest,
                 history=history,
                 uid=uid,
-                session_id=session_id,
                 use_alias=False,
             ):
                 if type(message) is not FlowLog:
@@ -1590,7 +1572,7 @@ class BPAgent:
         # Run the generated code
         collected_messages = []
         async for message in self.__run_llm_python_code(
-            formatted_code, proc_step, step_input, uid, 0, session_id
+            formatted_code,
         ):
             collected_messages.append(message)
 
@@ -1620,7 +1602,6 @@ class BPAgent:
         step_input: Optional[Any],
         proc_step: ProcessStep,
         uid: str,
-        session_id: str = "",
     ) -> Any:
         module_name, module_code = fetch_python_module(
             proc_step.name, uid, settings.user_artifact_bucket
@@ -1650,7 +1631,6 @@ class BPAgent:
         step_input: Union[str, pd.DataFrame],
         proc_step: ProcessStep,
         uid: str,
-        session_id: str = "",
     ) -> Any:
         namespace = {}
         func_name = proc_step.name.split(".")[0]
@@ -1764,10 +1744,10 @@ class BPAgent:
                 if len(kwargs) == 0:
                     # Async functions
                     if inspect.iscoroutinefunction(func):
-                        step_output = await func(step_input, session_id=session_id)
+                        step_output = await func(step_input)
                     # Sync functions
                     else:
-                        step_output = func(step_input, session_id)
+                        step_output = func(step_input)
                 # Case 2: this step has kwargs
                 else:
                     # Async functions
@@ -1775,16 +1755,15 @@ class BPAgent:
                         if proc_step.use_prev_input is not False:
                             step_output = await func(
                                 step_input,
-                                session_id=session_id,
                                 **kwargs,
                             )
                         else:
                             step_output = await func(
-                                step_input, session_id=session_id, **kwargs
+                                step_input, **kwargs
                             )
                     # Sync functions
                     else:
-                        step_output = func(step_input, session_id=session_id, **kwargs)
+                        step_output = func(step_input, **kwargs)
             except Exception as e:
                 raise e
 
