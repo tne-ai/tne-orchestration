@@ -1544,7 +1544,7 @@ class BPAgent:
                 "model_name": proc_step.model_name,
                 "api_key": proc_step.api_key,
             }
-        code_gen_prompt = f"{data_context_buffer}\n\n{code_gen_manifest}"
+        code_gen_prompt = f"{data_context_buffer}\n\n{code_gen_manifest.get('prompt')}"
         if proc_step.prompt:
             code_gen_prompt = (
                 f"{code_gen_prompt}\n\nPROMPT FROM USER: {proc_step.prompt}"
