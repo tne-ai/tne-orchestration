@@ -32,5 +32,11 @@ class Setting(BaseSettings):
         default=12345678,
         description="Random seed"
     )
+    max_retries: int = Field(
+        required=False,
+        default=3,
+        description="Max server retries"
+    )
+
 
 settings = Setting()

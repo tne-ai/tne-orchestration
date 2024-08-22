@@ -78,6 +78,11 @@ class GraphParseError(Exception):
         super().__init__(message)
 
 
+class CodeRunError(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+
+
 class FlowLog(BaseModel):
     message: Optional[str] = None
     """Log message"""
@@ -508,14 +513,26 @@ class BPAgent:
 
         # Generate + run Python code
         elif proc_step.type == "code_generation":
-            async for message in self.__run_llm_python_step(
-                step_input, proc_step, uid, history=history
-            ):
-                if type(message) is LLMResponse:
-                    step_output = message
-                else:
-                    yield message
-            yield "\n\n"
+            retries = 0
+            done = False
+            while retries <= settings.max_retries and not done:
+                try:
+                    async for message in self.__run_llm_python_step(
+                        step_input, proc_step, uid, history=history
+                    ):
+                        if type(message) is LLMResponse:
+                            step_output = message
+                        else:
+                            yield message
+                        done = True
+                except CodeRunError as ce:
+                    logger.warning(ce)
+                    retries += 1
+                    if retries > settings.max_retries:
+                        done = True
+                        raise IOError("Code generation failed. Please reword your question and try again.")
+
+                yield "\n\n"
 
         # Nested BP step
         elif proc_step.type == "bp":
@@ -1463,7 +1480,7 @@ class BPAgent:
                 yield "\n"
             raise e
 
-    async def __run_llm_python_code(self, llm_code) -> AsyncGenerator:
+    async def __run_llm_python_code(self, llm_code: str) -> AsyncGenerator:
         """Code interpreter module; allow the LLMs to generate and run Python code on the data within the BP."""
         if llm_code:
             # Save the LLM-generated code to a temporary file
@@ -1484,9 +1501,7 @@ class BPAgent:
                 # Access the results from the namespace
                 result = namespace.get("result")
             except Exception as e:
-                logger.error(f"Exception occurred: {e}")
-                result = "result = None"
-                yield result
+                raise CodeRunError(e)
             finally:
                 # Clean up the temporary file
                 os.remove(temp_file_path)
@@ -1574,19 +1589,18 @@ class BPAgent:
         if type(formatted_code) is FlowLog:
             yield formatted_code
 
-        # Remove notebook-like syntax with result variable
-        if re.search(r"\n\nresult$", formatted_code):
-            formatted_code = re.sub(r"\n\nresult$", "", formatted_code)
-
         # Run the generated code
         collected_messages = []
-        async for message in self.__run_llm_python_code(
-            formatted_code,
-        ):
-            collected_messages.append(message)
+        try:
+            async for message in self.__run_llm_python_code(
+                formatted_code,
+            ):
+                collected_messages.append(message)
 
-            if type(message) is not pd.DataFrame and type(message) is not pd.Series:
-                yield str(message)
+                if type(message) is not pd.DataFrame and type(message) is not pd.Series:
+                    yield str(message)
+        except CodeRunError as ce:
+            raise ce
 
         if proc_step.data_output_name:
             await upload_to_s3(
@@ -1780,7 +1794,12 @@ class BPAgent:
 
     @classmethod
     def __parse_llm_response(cls, res, pattern) -> Union[str, FlowLog]:
-        # Filter the LLM output based off of a specified regex pattern
+        # First look for python markdown specifically
+        code_block_match = re.search(r"```python(.*?)```", res, re.DOTALL)
+        if code_block_match:
+            return code_block_match.group(1).strip()
+
+        # Look for other markdown if not found
         match = None
         if pattern:
             re_pattern = r"{}(.*?){}".format(re.escape(pattern), re.escape(pattern))
@@ -1796,10 +1815,10 @@ class BPAgent:
             try:
                 # FIXME(lucas): this is stupid
                 if (
-                    "[" in formatted_res
-                    and "import" not in formatted_res
-                    and "Announcement" not in formatted_res
-                    and "json" not in formatted_res
+                        "[" in formatted_res
+                        and "import" not in formatted_res
+                        and "Announcement" not in formatted_res
+                        and "json" not in formatted_res
                 ):
                     formatted_res = formatted_res.strip("[]").split(",")
                     formatted_res = [i.strip() for i in formatted_res]
