@@ -29,7 +29,8 @@ from orchestration.v2.api.api import (
 from typing import Union, Dict, Tuple
 
 # Inference server literals
-PROC_DIR = "proc"
+PROC_DIR = "proc"  # DEPRECATED
+EXPERTS_DIR = "experts"
 AGENT_DIR = "manifests"
 CODE_DIR = "modules"
 DATA_DIR = "data"
@@ -42,6 +43,8 @@ OPERATOR_NODES = [
     "rag",
     "semantic",
 ]
+
+LATEST = "latest"
 
 # RAG literals
 RAG_DB_HOST = "postgresql-ebp.cfwmuvh4blso.us-west-2.rds.amazonaws.com"
@@ -223,14 +226,19 @@ def get_s3_ls(bucket_name: str, prefix: str) -> str:
     return dir_summary
 
 
-def get_python_s3_module(module_name: str, uid: str, bucket_name: str):
-    """Load Python code from S3"""
+def get_python_s3_module(module_name: str, uid: str, bucket_name: str, project: Optional[str] = None, version: Optional[str] = LATEST):
+    """Load Python code from S3. DEPRECATED - use fetch_python_module() now."""
     try:
         s3 = boto3.client("s3")
-        python_s3_path = f"d/{uid}/{CODE_DIR}"
-        bucket_contents = s3.list_objects(Bucket=bucket_name, Prefix=python_s3_path)[
+
+        if project:
+            python_s3_path = f"projects/{uid}/{project}-{version}/{CODE_DIR}"
+        else:
+            python_s3_path = f"d/{uid}/{CODE_DIR}"
+
+        bucket_contents = s3.list_objects(Bucket=bucket_name, Prefix=python_s3_path).get(
             "Contents"
-        ]
+        )
 
         # Load processes from S3
         for obj in bucket_contents:
@@ -252,14 +260,22 @@ def get_python_s3_module(module_name: str, uid: str, bucket_name: str):
     return None
 
 
-def fetch_python_module(module_name: str, uid: str, bucket_name: str):
+def fetch_python_module(module_name: str, uid: str, bucket_name: str, project: Optional[str] = None, version: Optional[str] = LATEST):
     """Load Python code from S3"""
     try:
         s3 = boto3.client("s3")
+
+        if project:
+            python_s3_path = f"projects/{uid}/{project}-{version}/{CODE_DIR}"
+        else:
+            python_s3_path = f"d/{uid}/{CODE_DIR}"
+
         python_s3_path = f"d/{uid}/{CODE_DIR}"
-        bucket_contents = s3.list_objects(Bucket=bucket_name, Prefix=python_s3_path)[
+        bucket_contents = s3.list_objects(Bucket=bucket_name, Prefix=python_s3_path).get(
             "Contents"
-        ]
+        )
+        if not bucket_contents:
+            return None
 
         # Load processes from S3
         for obj in bucket_contents:
@@ -321,15 +337,19 @@ async def upload_to_s3(file_name, data, uid, bucket_name) -> str:
         raise e
 
 
-def get_data_from_s3(file_name, uid, bucket_name):
+def get_data_from_s3(file_name: str, uid: str, bucket_name: str, project: Optional[str] = None, version: Optional[str] = None):
     s3 = boto3.client("s3")
-    data_path = f"d/{uid}/data"
+    if project:
+        data_path = f"projects/{uid}/{project}-{version}/{DATA_DIR}"
+    else:
+        data_path = f"d/{uid}/data"
     bucket_contents = s3.list_objects(
         Bucket=bucket_name,
         Prefix=data_path,
-    )["Contents"]
+    ).get("Contents")
+    if not bucket_contents:
+        return None
 
-    # Load processes from S3
     for obj in bucket_contents:
         obj_filename = obj.get("Key").split("/")[-1]
         if obj_filename == file_name:
@@ -349,14 +369,28 @@ def get_data_from_s3(file_name, uid, bucket_name):
     return None
 
 
-def get_s3_proc(proc_name: str, uid: str, bucket_name: str):
+def get_s3_proc(
+    proc_name: str,
+    uid: str,
+    bucket_name: str,
+    project: Optional[str] = None,
+    version: Optional[str] = LATEST,
+):
     """Fetches a process file from S3"""
     try:
         s3 = boto3.client("s3")
-        proc_s3_path = f"d/{uid}/{PROC_DIR}"
-        bucket_contents = s3.list_objects(Bucket=bucket_name, Prefix=proc_s3_path)[
+
+        # Construct S3 path
+        if project:
+            proc_s3_path = f"projects/{uid}/{project}-{version}/{EXPERTS_DIR}"
+        else:
+            proc_s3_path = f"d/{uid}/{PROC_DIR}"
+
+        bucket_contents = s3.list_objects(Bucket=bucket_name, Prefix=proc_s3_path).get(
             "Contents"
-        ]
+        )
+        if not bucket_contents:
+            return None
 
         # Load processes from S3
         for obj in bucket_contents:
@@ -370,7 +404,7 @@ def get_s3_proc(proc_name: str, uid: str, bucket_name: str):
                         proc_contents = parse_graph(
                             s3_proc, yaml.safe_load(file_content)
                         )
-                        proc = BP(proc_contents, uid)
+                        proc = BP(process=proc_contents, uid=uid, project=project, version=version)
                     except Exception as e:
                         raise GraphParseError(message=e)
                     return proc
@@ -668,7 +702,7 @@ def __construct_step_dict(
             "api_key": node.get("data").get("apiKey"),
             "engine_name": node.get("data").get("engineName"),
             "model_name": node.get("data").get("modelName"),
-            "use_user_query": node.get("data").get("useUserQuery")
+            "use_user_query": node.get("data").get("useUserQuery"),
         }
 
         if data_output_name:

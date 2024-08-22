@@ -556,7 +556,8 @@ class BPAgent:
             semantic_search_messages = []
             try:
                 async for message in self.__run_semantic_search_step(
-                    step_input, proc_step,
+                    step_input,
+                    proc_step,
                 ):
                     if type(message) is not FlowLog:
                         semantic_search_messages.append(message)
@@ -740,6 +741,8 @@ class BPAgent:
         self,
         question,
         uid: str,
+        project: Optional[str],
+        version: Optional[str],
         history: Optional[List[Dict[str, str]]] = None,
     ) -> AsyncGenerator:
         """Manages LLM inference (more documentation forthcoming)."""
@@ -763,7 +766,11 @@ class BPAgent:
                         if uid == "SYSTEM":
                             show_description = False
                         user_proc = get_s3_proc(
-                            proc_name, uid, settings.user_artifact_bucket
+                            proc_name=proc_name,
+                            uid=uid,
+                            bucket_name=settings.user_artifact_bucket,
+                            project=project,
+                            version=version,
                         )
                     except (NoCredentialsError, PartialCredentialsError) as ce:
                         aws_token_error = True
@@ -1249,7 +1256,9 @@ class BPAgent:
                 raise e
 
     async def __run_rag_step(
-        self, step_input: str, proc_step: ProcessStep,
+        self,
+        step_input: str,
+        proc_step: ProcessStep,
     ) -> AsyncGenerator:
         # Create a RagRequest from the step input
         if proc_step.rag_db_name:
@@ -1379,7 +1388,9 @@ class BPAgent:
             raise e
 
     async def __run_semantic_search_step(
-        self, step_input: str, proc_step: ProcessStep,
+        self,
+        step_input: str,
+        proc_step: ProcessStep,
     ) -> AsyncGenerator:
         # Create a RagRequest from the step input
         configs = {}
@@ -1452,9 +1463,7 @@ class BPAgent:
                 yield "\n"
             raise e
 
-    async def __run_llm_python_code(
-        self, llm_code
-    ) -> AsyncGenerator:
+    async def __run_llm_python_code(self, llm_code) -> AsyncGenerator:
         """Code interpreter module; allow the LLMs to generate and run Python code on the data within the BP."""
         if llm_code:
             # Save the LLM-generated code to a temporary file
@@ -1758,9 +1767,7 @@ class BPAgent:
                                 **kwargs,
                             )
                         else:
-                            step_output = await func(
-                                step_input, **kwargs
-                            )
+                            step_output = await func(step_input, **kwargs)
                     # Sync functions
                     else:
                         step_output = func(step_input, **kwargs)

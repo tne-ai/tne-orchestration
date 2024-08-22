@@ -41,6 +41,8 @@ class BP:
         self,
         process: dict,
         uid: str,
+        project: Optional[str] = None,
+        version: Optional[str] = "LATEST",
         cache_file: str = "./schema_cache.json",
     ):
         # Server configs for the process
@@ -58,7 +60,10 @@ class BP:
             raise MalformedDataError(f"Process had parsing error: {k}")
 
         # LLM configs
-        manifest_s3_path = f"d/{self.uid}/manifests"
+        if project:
+            manifest_s3_path = f"projects/{self.uid}/{project}-{version}/manifests"
+        else:
+            manifest_s3_path = f"d/{self.uid}/manifests"
         self.slashgpt_config = ChatConfigWithManifests(
             base_path="", path_manifests=self.manifests_path
         )
