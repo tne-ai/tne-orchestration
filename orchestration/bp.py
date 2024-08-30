@@ -72,8 +72,8 @@ class BP:
         )
 
         # Load data sources
-        db_metadata = self.__load_data(cache_file)
-        self.db_connectors = db_metadata["connectors"]
+        # db_metadata = self.__load_data(cache_file)
+        # self.db_connectors = db_metadata["connectors"]
 
         # Keep track of state
         self.current_step = 0
