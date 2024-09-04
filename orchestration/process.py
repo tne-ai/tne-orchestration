@@ -57,6 +57,8 @@ if settings.use_local_slashgpt:
 from slashgpt.chat_session import ChatSession
 
 logger = logging.getLogger(__name__)
+BUFFER_LENGTH=20000
+CTX_LENGTH=1000
 
 # Literal constants
 TNE_PACKAGE_PATH = "./tne-0.0.1-py3-none-any.whl"
@@ -109,9 +111,12 @@ def update_data_context_buffer(session, file_name, data_context_buffer):
         data = session.get_object(file_name)
         match type(data):
             case pd.DataFrame:
-                data_context_buffer += f"{file_name}: {data.head().to_string()}\n"
+                data_context_buffer += f"{file_name}\n\n{data.head().to_string()}\n"
             case str:
-                data_context_buffer += data
+                if len(data) <= BUFFER_LENGTH:
+                    data_context_buffer += f"{file_name}\n\n{data}"
+                else:
+                    data_context_buffer += f"CONTEXT FOR {file_name}\n\n{data[:BUFFER_LENGTH]}"
     except ValueError as ve:
         data = session.get_object_bytes(file_name).decode("utf-8")
         data_context_buffer += data
