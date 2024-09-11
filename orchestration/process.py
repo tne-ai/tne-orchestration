@@ -304,9 +304,6 @@ class BPAgent:
                     raise e
                 llm_step_output = "".join(collected_messages)
                 regex_pattern = "```"
-                yield FlowLog(
-                    message=f"[Assistant][call_llm] Extracting data from LLM response with pattern {regex_pattern}"
-                )
                 formatted_output = self.__parse_llm_response(
                     llm_step_output, regex_pattern
                 )
@@ -399,9 +396,6 @@ class BPAgent:
                 llm_step_output = "".join(llm_step_messages)
                 # Look for special outputs enclosed within backticks
                 regex_pattern = "```"
-                yield FlowLog(
-                    message=f"[Assistant][call_llm] Extracting data from LLM response with pattern {regex_pattern}"
-                )
                 formatted_output = self.__parse_llm_response(
                     llm_step_output, regex_pattern
                 )
@@ -748,9 +742,11 @@ class BPAgent:
                 if not res:
                     retry_attempts += 1
 
+            """
             yield FlowLog(
                 message=f"[Assistant][inference] Got response from LLM: {res}"
             )
+            """
 
         except (NoCredentialsError, PartialCredentialsError) as e:
             yield FlowLog(error=f"[Assistant][call_llm] AWS credential error")
@@ -1045,6 +1041,11 @@ class BPAgent:
                     raise e
 
                 step_output = collected_messages[-1]
+                if step_output.data:
+                    yield FlowLog(message=f"[BPAgent][run_proc] Output for {proc_step.description}: {str(step_output.data)}")
+                elif step_output.text:
+                    yield FlowLog(
+                        message=f"[BPAgent][run_proc] Output for {proc_step.description}: {step_output.text}")
 
             elif type(proc_step) is list:
                 # Emit spinning token for parallel tasks
@@ -1193,35 +1194,6 @@ class BPAgent:
                     yield "\n"
                     yield "```STOP_SPINNING```"
                     yield "\n"
-
-                # Stream data to client
-                if i == len(proc) - 1 or step_no == len(proc) - 1:
-                    if not is_sub_proc and type(step_output) is LLMResponse:
-                        if type(step_output.data) is pd.DataFrame:
-                            yield tabulate(
-                                step_output.data,
-                                headers="keys",
-                                tablefmt="pipe",
-                                showindex=False,
-                            )
-                            yield "\n\n"
-                        else:
-                            if type(step_output) is LLMResponse:
-                                if step_output.data is not None:
-                                    if (
-                                        proc_step.manifest.get("model").get(
-                                            "model_name"
-                                        )
-                                        in image_models
-                                    ):
-                                        yield step_output.text
-                                        yield "\n\n"
-                                    elif not is_base64_image(step_output.data):
-                                        yield step_output.data
-                                        yield "\n\n"
-                    else:
-                        yield step_output
-                        yield "\n\n"
 
     async def __run_llm_step(
         self,
@@ -1580,19 +1552,12 @@ class BPAgent:
                 formatted_code = parsed_resp.split("python\n")[1]
             else:
                 formatted_code = parsed_resp
-        elif (
-            type(parsed_resp) is FlowLog
-            and parsed_resp.message
-            == "[Assistant][call_llm] Regex pattern ``` match not detected. Returning unfiltered output."
-        ):
-            formatted_code = llm_resp
+
         # The LLM didn't generate code; likely because of a conversational, non-data question
         else:
-            formatted_code = "result = 'None'"
+            formatted_code = llm_resp
 
-        # Error case
-        if type(formatted_code) is FlowLog:
-            yield formatted_code
+        yield FlowLog(message=f"[BPAgent][run_proc] Generated code: {formatted_code}")
 
         # Run the generated code
         collected_messages = []
@@ -1833,6 +1798,4 @@ class BPAgent:
                     error=f"[Assistant][call_llm] Detected malformed list in LLM response. Likely LLM hallucination."
                 )
         else:
-            return FlowLog(
-                message=f"[Assistant][call_llm] Regex pattern {pattern} match not detected. Returning unfiltered output."
-            )
+            return None
