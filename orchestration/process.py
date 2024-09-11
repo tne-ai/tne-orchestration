@@ -1042,7 +1042,6 @@ class BPAgent:
                     raise e
 
                 step_output = collected_messages[-1]
-                breakpoint()
                 if step_output.data:
                     yield FlowLog(message=f"[BPAgent][run_proc] Output for {proc_step.description}: {str(step_output.data)}")
                 elif step_output.text:
