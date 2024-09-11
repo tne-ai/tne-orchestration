@@ -396,9 +396,10 @@ class BPAgent:
                 llm_step_output = "".join(llm_step_messages)
                 # Look for special outputs enclosed within backticks
                 regex_pattern = "```"
-                formatted_output = self.__parse_llm_response(
+                parsed_resp = self.__parse_llm_response(
                     llm_step_output, regex_pattern
                 )
+                formatted_output = parsed_resp if parsed_resp else llm_step_output
                 if type(formatted_output) is FlowLog:
                     if formatted_output.message:
                         step_output.text = llm_step_output
@@ -1041,12 +1042,12 @@ class BPAgent:
                     raise e
 
                 step_output = collected_messages[-1]
+                breakpoint()
                 if step_output.data:
                     yield FlowLog(message=f"[BPAgent][run_proc] Output for {proc_step.description}: {str(step_output.data)}")
                 elif step_output.text:
                     yield FlowLog(
                         message=f"[BPAgent][run_proc] Output for {proc_step.description}: {step_output.text}")
-
             elif type(proc_step) is list:
                 # Emit spinning token for parallel tasks
                 is_spinning = True
