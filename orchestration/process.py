@@ -766,10 +766,6 @@ class BPAgent:
     ) -> AsyncGenerator:
         """Manages LLM inference (more documentation forthcoming)."""
 
-        yield FlowLog(
-            message=f"[Assistant][inference] Received request from user: {uid}"
-        )
-
         user_proc = None
         show_description = True
         try:
@@ -1042,7 +1038,7 @@ class BPAgent:
                     raise e
 
                 step_output = collected_messages[-1]
-                if step_output.data:
+                if step_output.data is not None:
                     yield FlowLog(message=f"[BPAgent][run_proc] Output for {proc_step.description}: {str(step_output.data)}")
                 elif step_output.text:
                     yield FlowLog(
@@ -1186,8 +1182,7 @@ class BPAgent:
                                 step_str += f"{newline_str}{step_output.data}"
                         if step_output.data is not None:
                             step_input = step_output.data
-                        else:
-                            step_input = step_output.text
+                        else: step_input = step_output.text
 
                 # Send token to stop spinning
                 if is_spinning:
