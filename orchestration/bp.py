@@ -208,7 +208,7 @@ class ProcessStep:
         self.module = proc_step.get("module")
         self.kwargs = proc_step.get("kwargs")
         self.input = proc_step.get("input")
-        self.data_output_name = proc_step.get("data_output_name")
+        self.output_files = proc_step.get("output_files")
         self.debug_output_name = proc_step.get("debug_output_name")
         self.use_prev_input = proc_step.get("use_prev_input")
         self.sql_queries = proc_step.get("sql_queries")

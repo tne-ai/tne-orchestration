@@ -15,7 +15,7 @@ import sys
 import time
 import runpy
 from io import StringIO
-from typing import Any, Dict, Union, List, Optional, AsyncGenerator
+from typing import Any, AsyncGenerator, Dict, Union, List, Optional
 
 import boto3
 import pandas as pd
@@ -109,17 +109,22 @@ def replace_escaped_newlines(chunk: str) -> str:
 def update_data_context_buffer(session, file_name, data_context_buffer):
     try:
         data = session.get_object(file_name)
-        match type(data):
-            case pd.DataFrame:
-                data_context_buffer += f"{file_name}\n\n{data.head().to_string()}\n"
-            case str:
+        if type(data) == pd.DataFrame:
+            data_context_buffer += f"{file_name}\n\n{data.head().to_string()}\n\n"
+        elif type(data) == dict:
+                data_context_buffer += f"Multi-sheet excel file: {file_name}\n\n"
+                for k in data.keys():
+                    data_context_buffer += f"   Sheet name: {k}\n\n{data[k].head()}\n\n"
+        elif type(data) == str:
                 if len(data) <= BUFFER_LENGTH:
-                    data_context_buffer += f"{file_name}\n\n{data}"
+                    data_context_buffer += f"{file_name}\n\n{data}\n\n"
                 else:
-                    data_context_buffer += f"CONTEXT FOR {file_name}\n\n{data[:BUFFER_LENGTH]}"
+                    data_context_buffer += f"CONTEXT FOR {file_name}\n\n{data[:BUFFER_LENGTH]}\n\n"
+        else:
+            data_context_buffer += f"{data[:BUFFER_LENGTH]}\n\n"
     except ValueError as ve:
         data = session.get_object_bytes(file_name).decode("utf-8")
-        data_context_buffer += data
+        data_context_buffer += f"{data}]\n\nn"
     except IOError as ie:
         return data_context_buffer
 
@@ -1095,50 +1100,34 @@ class BPAgent:
             if step_output:
                 proc_steps = proc_step if type(proc_step) is list else [proc_step]
                 for s in proc_steps:
-                    data_filename = s.data_output_name
-                    if data_filename:
-                        if data_filename.endswith(".csv"):
-                            data_payload = {
-                                "type": "dataframe",
-                                "description": f"Data collected by step {s.name}",
-                                "data": step_output.data,
-                            }
-                        else:
-                            data_payload = {
-                                "type": "text",
-                                "description": f"Data collected by step {s.name}",
-                                "data": step_output.text,
-                            }
-                        proc.data[s.data_output_name.split(".")[0]] = data_payload
-                        # Uploads step data to S3 data bucket
-                        try:
-                            if (
-                                data_filename.endswith(".csv")
-                                or data_filename.endswith(".png")
-                                or data_filename.endswith(".jpg")
-                                or data_filename.endswith(".jpeg")
-                            ):
-                                await upload_to_s3(
-                                    s.data_output_name,
-                                    step_output.data,
-                                    uid,
-                                    settings.user_artifact_bucket,
-                                )
-                            else:
-                                if proc_step.type != "code_generation":
+                    output_files = s.output_files
+                    if output_files:
+                        for output_file in output_files:
+                            ext = output_file.split(".")[-1]
+                            # Uploads step data to S3 data bucket
+                            try:
+                                if ext in ["csv", "png", "jpg", "jpeg", "xlsx"] and step_output.data is not None:
                                     await upload_to_s3(
-                                        s.data_output_name,
-                                        step_output.text,
+                                        output_file,
+                                        step_output.data,
                                         uid,
                                         settings.user_artifact_bucket,
                                     )
-                            yield FlowLog(
-                                message=f"[BPAgent][run_proc] Uploaded {s.data_output_name} to S3..."
-                            )
-                        except Exception as e:
-                            raise IOError(
-                                f"[BPAgent][run_proc] Got error {e} uploading {s.data_output_name} to S3"
-                            )
+                                else:
+                                    if step_output.text:
+                                        await upload_to_s3(
+                                            output_file,
+                                            step_output.text,
+                                            uid,
+                                            settings.user_artifact_bucket,
+                                        )
+                                yield FlowLog(
+                                    message=f"[BPAgent][run_proc] Uploaded {output_file} to S3..."
+                                )
+                            except Exception as e:
+                                raise IOError(
+                                    f"[BPAgent][run_proc] Got error {e} uploading {output_file} to S3"
+                                )
 
                 # Update inputs for the next step
                 if type(proc_step) is list:
@@ -1566,14 +1555,6 @@ class BPAgent:
                     yield str(message)
         except CodeRunError as ce:
             raise ce
-
-        if proc_step.data_output_name:
-            await upload_to_s3(
-                proc_step.data_output_name,
-                formatted_code,
-                uid,
-                settings.user_artifact_bucket,
-            )
 
         ret = collected_messages[-1]
         if type(ret) is pd.DataFrame:

@@ -9,7 +9,7 @@ import asyncio
 import base64
 import binascii
 from orchestration.bp import BP
-from io import StringIO
+from io import StringIO, BytesIO
 
 
 from typing import Optional
@@ -299,22 +299,28 @@ def fetch_python_module(module_name: str, uid: str, bucket_name: str, project: O
 async def upload_to_s3(file_name, data, uid, bucket_name) -> str:
     """Upload an object to S3"""
     s3_path = f"d/{uid}/{DATA_DIR}"
+    ext = file_name.split(".")[-1]
 
-    # Handle CSV upload by using StringIO
-    if file_name.endswith(".csv"):
-        csv_buffer = StringIO()
-        data.to_csv(csv_buffer, index=False)
-        s3_data = csv_buffer.getvalue()
-        content_type = "text/csv"
-    elif file_name.endswith(".png"):
-        s3_data = data
-        content_type = "image/png"
-    elif file_name.endswith(".jpg") or file_name.endswith(".jpeg"):
-        s3_data = data
-        content_type = "image/jpeg"
-    else:
-        s3_data = data
-        content_type = "text/plain"
+    match ext:
+        case "csv":
+            csv_buffer = StringIO()
+            data.to_csv(csv_buffer, index=False)
+            s3_data = csv_buffer.getvalue()
+            content_type = "text/csv"
+        case "xlsx":
+            excel_buffer = BytesIO()
+            data.to_excel(excel_buffer, index=False)
+            s3_data = excel_buffer.getvalue()
+            content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        case "png":
+            s3_data = data
+            content_type = "image/png"
+        case "jpg" | "jpeg":
+            s3_data = data
+            content_type = "image/jpeg"
+        case _:
+            s3_data = data
+            content_type = "text/plain"
 
     full_file_name = f"{s3_path}/{file_name}"
 
@@ -577,7 +583,7 @@ def __get_node(node_id, nodes):
 
 
 def __construct_step_dict(
-    node, step_input, data_sources, data_output_name, debug_output_name, sql_queries
+    node, step_input, data_sources, output_files, debug_output_name, sql_queries
 ) -> Union[Dict, Tuple]:
     """Construct a graph node object given I/O information and node data"""
 
@@ -592,8 +598,8 @@ def __construct_step_dict(
             "suppress_output": node.get("data").get("outputToCanvas"),
             "data_sources": data_sources,
         }
-        if data_output_name:
-            step_dict["data_output_name"] = data_output_name
+        if output_files:
+            step_dict["output_files"] = output_files
 
         return step_dict
 
@@ -611,8 +617,8 @@ def __construct_step_dict(
             "data_sources": data_sources,
             "input": step_input,
         }
-        if data_output_name:
-            step_dict["data_output_name"] = data_output_name
+        if output_files:
+            step_dict["output_files"] = output_files
         if debug_output_name:
             step_dict["debug_output_name"] = debug_output_name
         if step_dict.get("name") == "dall-e-3":
@@ -664,8 +670,8 @@ def __construct_step_dict(
             "input": step_input,
         }
 
-        if data_output_name:
-            step_dict["data_output_name"] = data_output_name
+        if output_files:
+            step_dict["output_files"] = output_files
         if sql_queries:
             step_dict["sql_queries"] = sql_queries
 
@@ -683,8 +689,8 @@ def __construct_step_dict(
             "input": step_input,
         }
 
-        if data_output_name:
-            step_dict["data_output_name"] = data_output_name
+        if output_files:
+            step_dict["output_files"] = output_files
 
         return step_dict
 
@@ -705,8 +711,8 @@ def __construct_step_dict(
             "use_user_query": node.get("data").get("useUserQuery"),
         }
 
-        if data_output_name:
-            step_dict["data_output_name"] = data_output_name
+        if output_files:
+            step_dict["output_files"] = output_files
 
         return step_dict
 
@@ -723,8 +729,8 @@ def __construct_step_dict(
             "data_sources": data_sources,
             "input": step_input,
         }
-        if data_output_name:
-            step_dict["data_output_name"] = data_output_name
+        if output_files:
+            step_dict["output_files"] = output_files
 
         return step_dict
 
@@ -742,8 +748,8 @@ def __construct_step_dict(
             "max_count": node.get("data").get("maxEmbeddings"),
             "min_similarity": node.get("data").get("similarityThreshold"),
         }
-        if data_output_name:
-            step_dict["data_output_name"] = data_output_name
+        if output_files:
+            step_dict["output_files"] = output_files
 
         return step_dict
 
@@ -752,7 +758,7 @@ def __get_step_io_data(incoming_nodes, child_nodes, nodes):
     """Check graph edges to get I/O information about a particular node"""
     sql_queries = {}
     data_sources = []
-    step_input, data_output_name, debug_output_name = None, None, None
+    step_input, output_files, debug_output_name = None, None, None
 
     # Nodes for which current node is the target
     for n in incoming_nodes:
@@ -787,14 +793,16 @@ def __get_step_io_data(incoming_nodes, child_nodes, nodes):
             data_sources.append(data_name)
 
     # Targets of the current node
+    output_files = []
     for c in child_nodes:
         outgoing_node = __get_node(c, nodes)
         if outgoing_node.get("type") == "out":
             data_output_name = outgoing_node.get("data").get("outputName")
+            output_files.append(data_output_name)
         if outgoing_node.get("type") == "debug":
             debug_output_name = outgoing_node.get("data").get("outputName")
 
-    return step_input, data_sources, data_output_name, debug_output_name, sql_queries
+    return step_input, data_sources, output_files, debug_output_name, sql_queries
 
 
 def parse_graph(file_name, graph):
@@ -838,7 +846,7 @@ def parse_graph(file_name, graph):
             },
         },
         "output_type": "overwrite",
-        "data_output_name": "",
+        "output_files": [],
         "steps": {},
     }
 
@@ -865,7 +873,7 @@ def parse_graph(file_name, graph):
         (
             step_input,
             data_sources,
-            data_output_name,
+            output_files,
             debug_output_name,
             sql_queries,
         ) = __get_step_io_data(incoming_nodes, child_nodes, nodes)
@@ -883,7 +891,7 @@ def parse_graph(file_name, graph):
             node,
             step_input,
             data_sources,
-            data_output_name,
+            output_files,
             debug_output_name,
             sql_queries,
         )
