@@ -552,11 +552,14 @@ class BPAgent:
                     step_input,
                     sub_proc,
                     uid,
-                    True,
+                    is_sub_proc=True,
                     history=history,
                 ):
-                    if type(message) is LLMResponse:
-                        step_output = message
+                    if type(message) is tuple:
+                        if type(message[0]) is LLMResponse:
+                            step_output = message[0]
+                        else:
+                            yield message
                     else:
                         yield message
             except Exception as e:
@@ -926,8 +929,8 @@ class BPAgent:
         question: str,
         proc: BP,
         uid: str,
+        is_sub_proc: Optional[bool] = False,
         history: Optional[List[Dict[str, str]]] = None,
-        is_sub_proc: bool = False,
         step_no: int = 0,
         show_description: bool = True,
     ) -> AsyncGenerator:
@@ -941,7 +944,6 @@ class BPAgent:
                 question,
                 proc,
                 uid,
-                is_sub_proc=is_sub_proc,
                 step_no=step_no,
                 history=history,
                 show_description=show_description,
@@ -954,8 +956,8 @@ class BPAgent:
         question: str,
         proc: BP,
         uid: str,
+        is_sub_proc: Optional[bool] = False,
         history: Optional[List[Dict[str, str]]] = None,
-        is_sub_proc: bool = False,
         step_no: int = 0,
         show_description: bool = True,
     ) -> AsyncGenerator:
@@ -1098,6 +1100,8 @@ class BPAgent:
 
             # Save any data we've collected
             if step_output:
+                if is_sub_proc:
+                    yield step_output
                 proc_steps = proc_step if type(proc_step) is list else [proc_step]
                 for s in proc_steps:
                     output_files = s.output_files
