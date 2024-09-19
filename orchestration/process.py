@@ -367,12 +367,15 @@ class BPAgent:
 
                     response = requests.get(img_url)
                     if response.status_code == 200:
-                        img_s3_url = await upload_to_s3(
-                            img_filename,
-                            response.content,
-                            uid,
-                            settings.user_artifact_bucket,
-                        )
+                        try:
+                            img_s3_url = await upload_to_s3(
+                                img_filename,
+                                response.content,
+                                uid,
+                                settings.user_artifact_bucket,
+                            )
+                        except Exception as e:
+                            raise e
                         step_output.text = f"![]({img_s3_url})"
                         step_output.data = base64.b64encode(response.content).decode(
                             "utf-8"
@@ -637,6 +640,8 @@ class BPAgent:
                 data = get_data_from_s3(data_source, uid, settings.user_artifact_bucket)
                 if type(data) is dict:
                     data = data.get("data")
+                if data is None:
+                    raise ValueError(f"Data source {data_source} is null")
 
                 # CSV file
                 if type(data) is StringIO:
@@ -713,12 +718,15 @@ class BPAgent:
                     try:
                         if proc_step.debug_output_name and proc_step.manifest:
                             full_prompt = f"{manifest.get('prompt')}\n\n{question}"
-                            _ = await upload_to_s3(
-                                proc_step.debug_output_name,
-                                full_prompt,
-                                uid,
-                                settings.user_artifact_bucket,
-                            )
+                            try:
+                                _ = await upload_to_s3(
+                                    proc_step.debug_output_name,
+                                    full_prompt,
+                                    uid,
+                                    settings.user_artifact_bucket,
+                                )
+                            except Exception as e:
+                                raise e
                     except Exception as e:
                         raise IOError(
                             f"Got error {e} while attempting to upload {proc_step.debug_output_name}"
@@ -1111,20 +1119,26 @@ class BPAgent:
                             # Uploads step data to S3 data bucket
                             try:
                                 if ext in ["csv", "png", "jpg", "jpeg", "xlsx"] and step_output.data is not None:
-                                    await upload_to_s3(
-                                        output_file,
-                                        step_output.data,
-                                        uid,
-                                        settings.user_artifact_bucket,
-                                    )
-                                else:
-                                    if step_output.text:
+                                    try:
                                         await upload_to_s3(
                                             output_file,
-                                            step_output.text,
+                                            step_output.data,
                                             uid,
                                             settings.user_artifact_bucket,
                                         )
+                                    except Exception as e:
+                                        raise e
+                                else:
+                                    if step_output.text:
+                                        try:
+                                            await upload_to_s3(
+                                                output_file,
+                                                step_output.text,
+                                                uid,
+                                                settings.user_artifact_bucket,
+                                            )
+                                        except Exception as e:
+                                            raise e
                                 yield FlowLog(
                                     message=f"[BPAgent][run_proc] Uploaded {output_file} to S3..."
                                 )

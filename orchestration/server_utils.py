@@ -301,6 +301,9 @@ async def upload_to_s3(file_name, data, uid, bucket_name) -> str:
     s3_path = f"d/{uid}/{DATA_DIR}"
     ext = file_name.split(".")[-1]
 
+    if not data:
+        raise ValueError("Attempted to upload null data to S3")
+
     match ext:
         case "csv":
             csv_buffer = StringIO()
