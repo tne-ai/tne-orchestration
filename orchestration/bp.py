@@ -63,7 +63,7 @@ class BP:
         if project:
             manifest_s3_path = f"projects/{self.uid}/{project}-{version}/manifests"
         else:
-            manifest_s3_path = f"d/{self.uid}/manifests"
+            manifest_s3_path = f"d/{self.uid}/Agents"
         self.slashgpt_config = ChatConfigWithManifests(
             base_path="", path_manifests=self.manifests_path
         )

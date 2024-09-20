@@ -29,11 +29,11 @@ from orchestration.v2.api.api import (
 from typing import Union, Dict, Tuple
 
 # Inference server literals
-PROC_DIR = "proc"  # DEPRECATED
-EXPERTS_DIR = "experts"
-AGENT_DIR = "manifests"
-CODE_DIR = "modules"
-DATA_DIR = "data"
+PROC_DIR = "Experts"  # DEPRECATED
+EXPERTS_DIR = "Experts"
+AGENT_DIR = "Agents"
+CODE_DIR = "Code"
+DATA_DIR = "Files"
 OPERATOR_NODES = [
     "llm",
     "proc",
@@ -351,7 +351,7 @@ def get_data_from_s3(file_name: str, uid: str, bucket_name: str, project: Option
     if project:
         data_path = f"projects/{uid}/{project}-{version}/{DATA_DIR}"
     else:
-        data_path = f"d/{uid}/data"
+        data_path = f"d/{uid}/{DATA_DIR}"
     bucket_contents = s3.list_objects(
         Bucket=bucket_name,
         Prefix=data_path,

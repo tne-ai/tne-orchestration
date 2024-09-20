@@ -1053,14 +1053,13 @@ class BPAgent:
                     raise e
 
                 step_output = collected_messages[-1]
-                if type(step_output) is not LLMResponse:
-                    raise ValueError("Query returned a malformed response. Please try again.")
 
-                if step_output.data is not None:
-                    yield FlowLog(message=f"[BPAgent][run_proc] Output for {proc_step.description}: {str(step_output.data)}")
-                elif step_output.text:
-                    yield FlowLog(
-                        message=f"[BPAgent][run_proc] Output for {proc_step.description}: {step_output.text}")
+                if type(step_output) is LLMResponse:
+                    if step_output.data is not None:
+                        yield FlowLog(message=f"[BPAgent][run_proc] Output for {proc_step.description}: {str(step_output.data)}")
+                    elif step_output.text:
+                        yield FlowLog(
+                            message=f"[BPAgent][run_proc] Output for {proc_step.description}: {step_output.text}")
             elif type(proc_step) is list:
                 # Emit spinning token for parallel tasks
                 is_spinning = True
