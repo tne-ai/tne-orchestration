@@ -29,16 +29,11 @@ from orchestration.v2.api.api import (
 from typing import Union, Dict, Tuple
 
 # Inference server literals
-# PROC_DIR = "Experts"  # DEPRECATED
-# EXPERTS_DIR = "Experts"
-# AGENT_DIR = "Agents"
-# CODE_DIR = "Code"
-# DATA_DIR = "Files"
-PROC_DIR = "proc"
-EXPERTS_DIR = "proc"
-AGENT_DIR = "manifests"
-CODE_DIR = "modules"
-DATA_DIR = "data"
+PROC_DIR = "Experts"  # DEPRECATED
+EXPERTS_DIR = "Experts"
+AGENT_DIR = "Agents"
+CODE_DIR = "Code"
+DATA_DIR = "Files"
 
 OPERATOR_NODES = [
     "llm",

@@ -21,7 +21,6 @@ import boto3
 import pandas as pd
 import requests
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError
-from openai import AsyncOpenAI
 from opentelemetry import trace
 from orchestration.bp import BP, ProcessStep
 from orchestration.server_utils import (
@@ -61,6 +60,7 @@ CTX_LENGTH=1000
 
 # Literal constants
 TNE_PACKAGE_PATH = "./tne-0.0.1-py3-none-any.whl"
+DATA_DIR = "Files"
 image_models = ["dall-e-3"]
 
 smr_client = boto3.client("sagemaker-runtime")  # type: SageMakerRuntimeClient
@@ -155,57 +155,6 @@ async def collect_messages(generator: AsyncGenerator):
         if type(msg) is str:
             response_str += msg
     return response_str
-
-
-async def vega_chart(
-    df_data: pd.DataFrame, uid: str, max_retries: int = 3
-) -> Optional[str]:
-    retry_no = 0
-    chart = None
-    plot_chart_proc = get_s3_proc("Plot Chart", "SYSTEM", settings.user_artifact_bucket)
-    proc_step = plot_chart_proc.steps[0]
-    while retry_no < max_retries and not chart:
-        tools = [json.loads(proc_step.tool_json)]
-        client = AsyncOpenAI(
-            api_key=os.getenv(
-                "OPENAI_API_KEY",
-            ),
-        )
-        prompt = proc_step.manifest.get("prompt")
-        response = await client.chat.completions.create(
-            model="gpt-3.5-turbo-1106",
-            messages=[
-                {"role": "system", "content": prompt},
-                {
-                    "role": "user",
-                    "content": f"Plot the data: {df_data.head(5)}",
-                },
-            ],
-            tools=tools,
-        )
-
-        choice = response.choices[0]
-        if choice.finish_reason == "tool_calls":
-            function_call = choice.message.tool_calls[0].function
-            func_args = json.loads(choice.message.tool_calls[0].function.arguments)
-            try:
-                func_namespace = {}
-                func_name, func_code = get_python_s3_module(
-                    function_call.name, "SYSTEM", settings.user_artifact_bucket
-                )
-                exec(func_code, func_namespace)
-
-                func = func_namespace[function_call.name]
-                chart = await func(data=df_data, **func_args)
-                if chart:
-                    return chart.to_json()
-                else:
-                    retry_no += 1
-
-            except Exception:
-                return None
-
-    return None
 
 
 class BPAgent:
@@ -335,7 +284,7 @@ class BPAgent:
                     img_url = "".join(llm_step_messages)
 
                     # Generate a unique filename based off of the image contents
-                    data_s3_path = f"d/{uid}/data"
+                    data_s3_path = f"d/{uid}/{DATA_DIR}"
                     data_filenames = get_s3_ls(
                         settings.user_artifact_bucket, data_s3_path
                     )
@@ -433,38 +382,24 @@ class BPAgent:
             elif type(python_step_resp) is tuple:
                 step_output.text = python_step_resp[0]
                 step_output.data = python_step_resp[1]
-                # vega_json = await vega_chart(step_output.data, uid)
-                vega_json = None
-                if not vega_json:
-                    if type(step_output.data) is pd.DataFrame:
-                        yield tabulate(
-                            step_output.data.head(),
-                            headers="keys",
-                            tablefmt="pipe",
-                            showindex=False,
-                        )
-                    elif type(step_output.data) is str:
-                        yield step_output.data
-                else:
-                    yield "```vega\n"
-                    yield vega_json
-                    yield "\n```"
-                yield "\n\n"
-            elif type(python_step_resp) is pd.DataFrame:
-                step_output.data = python_step_resp
-                # vega_json = await vega_chart(step_output.data, uid)
-                vega_json = None
-                if not vega_json:
+                if type(step_output.data) is pd.DataFrame:
                     yield tabulate(
                         step_output.data.head(),
                         headers="keys",
                         tablefmt="pipe",
                         showindex=False,
                     )
-                else:
-                    yield "```vega\n"
-                    yield vega_json
-                    yield "\n```"
+                elif type(step_output.data) is str:
+                    yield step_output.data
+                yield "\n\n"
+            elif type(python_step_resp) is pd.DataFrame:
+                step_output.data = python_step_resp
+                yield tabulate(
+                    step_output.data.head(),
+                    headers="keys",
+                    tablefmt="pipe",
+                    showindex=False,
+                )
                 yield "\n\n"
             else:
                 raise NotImplementedError
@@ -483,37 +418,24 @@ class BPAgent:
             elif type(python_step_resp) is tuple:
                 step_output.text = python_step_resp[0]
                 step_output.data = python_step_resp[1]
-                vega_json = await vega_chart(step_output.data, uid)
-                if not vega_json:
-                    if type(step_output.data) is pd.DataFrame:
-                        yield tabulate(
-                            step_output.data.head(),
-                            headers="keys",
-                            tablefmt="pipe",
-                            showindex=False,
-                        )
-                    elif type(step_output.data) is str:
-                        yield step_output.data
-                else:
-                    yield "```vega\n"
-                    yield vega_json
-                    yield "\n```"
-                yield "\n\n"
-            elif type(python_step_resp) is pd.DataFrame:
-                step_output.data = python_step_resp
-                # vega_json = await vega_chart(step_output.data, uid)
-                vega_json = None
-                if not vega_json:
+                if type(step_output.data) is pd.DataFrame:
                     yield tabulate(
                         step_output.data.head(),
                         headers="keys",
                         tablefmt="pipe",
                         showindex=False,
                     )
-                else:
-                    yield "```vega\n"
-                    yield vega_json
-                    yield "\n```"
+                elif type(step_output.data) is str:
+                    yield step_output.data
+                yield "\n\n"
+            elif type(python_step_resp) is pd.DataFrame:
+                step_output.data = python_step_resp
+                yield tabulate(
+                    step_output.data.head(),
+                    headers="keys",
+                    tablefmt="pipe",
+                    showindex=False,
+                )
                 yield "\n\n"
             else:
                 raise NotImplementedError
@@ -1216,40 +1138,18 @@ class BPAgent:
                 # TODO(lucas): Chat history for hosted models
                 if proc_step.manifest:
                     if proc_step.manifest.get("model"):
-                        proc_step.manifest.get("model")
-                        if (
-                            proc_step.manifest.get("model").get("model_name")
-                            == "tne-bigtext-arxiv"
+                        async for message in self.process_llm(
+                            question=step_input,
+                            proc_step=proc_step,
+                            uid=uid,
+                            use_alias=False,
+                            history=history,
                         ):
-                            endpoint = os.getenv(
-                                "BIGTEXT_ENDPOINT", "http://localhost:5002/v1"
-                            )
-                            client = AsyncOpenAI(base_url=endpoint)
-                            event_stream = await client.chat.completions.create(
-                                model="bigtext-arxiv-endor",
-                                messages=[{"role": "user", "content": step_input}],
-                                stream=True,
-                            )
-                            async for event in event_stream:
-                                content = event.choices[0].delta.content or ""
-                                collected_messages.append(content)
-                                yield content
-
-                            llm_resp = "".join(collected_messages)
-                            retry_no += 1
-                        else:
-                            async for message in self.process_llm(
-                                question=step_input,
-                                proc_step=proc_step,
-                                uid=uid,
-                                use_alias=False,
-                                history=history,
-                            ):
-                                if type(message) is not FlowLog:
-                                    collected_messages.append(message)
-                                yield message
-                            llm_resp = "".join(collected_messages)
-                            retry_no += 1
+                            if type(message) is not FlowLog:
+                                collected_messages.append(message)
+                            yield message
+                        llm_resp = "".join(collected_messages)
+                        retry_no += 1
             except Exception as e:
                 raise e
 
@@ -1279,7 +1179,7 @@ class BPAgent:
             response_count += 1
             return (
                 log_progress()
-            )  # TODO(lucas): Probably don't need to log every packet, don't forget about this
+            )
 
         async def on_error(error_code: int, error_str: str):
             yield FlowLog(
@@ -1613,150 +1513,6 @@ class BPAgent:
             raise e
 
         return namespace.get("result")
-
-    # DEPRECATED - current experts use __run_python_code
-    async def __run_python_step(
-        self,
-        step_input: Union[str, pd.DataFrame],
-        proc_step: ProcessStep,
-        uid: str,
-    ) -> Any:
-        namespace = {}
-        func_name = proc_step.name.split(".")[0]
-
-        # If any SQL queries, run them and collect the dataframe results
-        sql_kwargs = {}
-        if proc_step.sql_queries:
-            # Construct the function scope for running SQL
-            sql_namespace = {}
-            run_sql_name, run_sql_code = get_python_s3_module(
-                "run_sql", "SYSTEM", settings.user_artifact_bucket
-            )
-            exec(run_sql_code, sql_namespace)
-
-            # Iteratively run each SQL query
-            run_sql = sql_namespace[run_sql_name.split(".")[0]]
-            for query_name in proc_step.sql_queries.keys():
-                sql_query = proc_step.sql_queries[query_name]
-                try:
-                    df = await run_sql(
-                        sql_query,
-                        proc=proc_step.parent,
-                        db_name="ebp",
-                    )
-                    if len(df) > 1:
-                        sql_kwargs[query_name] = df[1]
-                except Exception as e:
-                    raise ValueError(
-                        f"Got Postgres error {e} running query {sql_query}"
-                    )
-
-        try:
-            # Load Python code from S3
-            proc_step.name = proc_step.name.split(".")[0]
-            module_name, module_code = get_python_s3_module(
-                proc_step.name, uid, settings.user_artifact_bucket
-            )
-            if re.search(r"^FEATURE_FLAG_KNATIVE_RUNTIME = True$", module_code, re.M):
-                # Add kwargs from the step graph
-                kwargs = proc_step.kwargs
-
-                rt = krt.KnativeRuntime()
-                name = module_name.replace("_", "-").replace(".py", "") + "-" + uid[0:6]
-                ret = await rt.aexec(
-                    name=name,
-                    inputs=kwargs,
-                    # endpoint="http://localhost:8081",
-                )
-                return ret
-            else:
-                exec(module_code, namespace)
-        except krt.ExecutionError as e:
-            return FlowLog(error="Remote code execution failed", exc_info=e)
-        except (NoCredentialsError, PartialCredentialsError, Exception) as e:
-            return FlowLog(
-                error=f"[SlashGPTServer][__run_python_step] AWS credentials error: {e}"
-            )
-        # Construct the function scope
-        if func_name in namespace and callable(namespace[func_name]):
-            func = namespace[func_name]
-            func_params = inspect.signature(func).parameters
-
-            func_scope = {}
-            sources = proc_step.data_sources
-            if sources and sources[0] != "none":
-                for data_source in sources:
-                    try:
-                        session = TNE(uid, settings.user_artifact_bucket)
-                        proc_step.data.update(
-                            {
-                                data_source.split(".")[0].strip(): session.get_object(
-                                    data_source
-                                )
-                            }
-                        )
-                    except Exception:
-                        pass
-                for k in proc_step.data.keys():
-                    if len(k.split(".")) > 1:
-                        key_name = k.split(".")[0]
-                    else:
-                        key_name = k
-                    func_scope[key_name] = proc_step.data.get(k)
-
-            # Handle kwargs
-            kwargs = {}
-            proc_kwargs = proc_step.kwargs
-
-            # Add kwargs from the step graph
-            if proc_kwargs:
-                kwargs.update(proc_kwargs)
-
-            # Add any SQL queries to the kwargs
-            kwargs.update(sql_kwargs)
-
-            for param in func_params:
-                ##
-                # Special case: some functions may need to access process-level object
-                # like database connectors, etc. and as such functions may have a BP
-                # as an argument. This looks for that case and fills out the parent process
-                ##
-                if func_params.get(param).annotation == BP:
-                    kwargs.update({param: proc_step.parent})
-
-            # Merge func_scope and kwargs
-            if len(func_scope) > 0:
-                kwargs.update(func_scope)
-
-            # Case 1: this step has no kwargs
-            try:
-                if len(kwargs) == 0:
-                    # Async functions
-                    if inspect.iscoroutinefunction(func):
-                        step_output = await func(step_input)
-                    # Sync functions
-                    else:
-                        step_output = func(step_input)
-                # Case 2: this step has kwargs
-                else:
-                    # Async functions
-                    if inspect.iscoroutinefunction(func):
-                        if proc_step.use_prev_input is not False:
-                            step_output = await func(
-                                step_input,
-                                **kwargs,
-                            )
-                        else:
-                            step_output = await func(step_input, **kwargs)
-                    # Sync functions
-                    else:
-                        step_output = func(step_input, **kwargs)
-            except Exception as e:
-                raise e
-
-            return step_output
-
-        return None
 
     @classmethod
     def __parse_llm_response(cls, res, pattern) -> Union[str, FlowLog]:

@@ -11,6 +11,7 @@ if settings.use_local_slashgpt:
     sys.path.append(os.path.join(os.path.dirname(__file__), "../../SlashTNE/src"))
 
 from slashgpt.chat_config_with_manifests import ChatConfigWithManifests
+AGENT_DIR = "Agents"
 
 
 class MalformedDataError(Exception):
@@ -63,7 +64,7 @@ class BP:
         if project:
             manifest_s3_path = f"projects/{self.uid}/{project}-{version}/manifests"
         else:
-            manifest_s3_path = f"d/{self.uid}/manifests"
+            manifest_s3_path = f"d/{self.uid}/{AGENT_DIR}"
         self.slashgpt_config = ChatConfigWithManifests(
             base_path="", path_manifests=self.manifests_path
         )
