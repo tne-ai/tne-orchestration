@@ -38,7 +38,7 @@ def _create_messages(
                 """
             ),
             system_message(
-                f"""
+                """
                 Please evaluate the relevancy of the "ADDITIONAL CONTENT" given directly above.
                 The "ADDITIONAL CONTENT" should be evaluated for relevancy to the "LATEST USER INPUT" within the context of all "PREVIOUS CONTENT".
                 Please explain what parts of the "ADDITIONAL CONTENT" are relevant and how they address the "LATEST USER INPUT".
@@ -52,7 +52,7 @@ def _create_messages(
             #     """
             # ),
             system_message(
-                f"""
+                """
                 Now, please evaluate the relevancy the "ADDITIONAL CONTENT" as instructed above.
                 """
             ),

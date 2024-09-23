@@ -32,7 +32,7 @@ def _create_messages(
     messages.extend(
         [
             system_message(
-                f"""
+                """
                 Please consider the above additional content when answering the user's next input.
                 """
             ),

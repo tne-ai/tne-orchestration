@@ -21,7 +21,6 @@ import boto3
 import pandas as pd
 import requests
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError
-from mypy_boto3_sagemaker_runtime.client import SageMakerRuntimeClient
 from openai import AsyncOpenAI
 from opentelemetry import trace
 from orchestration.bp import BP, ProcessStep
@@ -109,23 +108,23 @@ def replace_escaped_newlines(chunk: str) -> str:
 def update_data_context_buffer(session, file_name, data_context_buffer):
     try:
         data = session.get_object(file_name)
-        if type(data) == pd.DataFrame:
+        if type(data) is pd.DataFrame:
             data_context_buffer += f"{file_name}\n\n{data.head().to_string()}\n\n"
-        elif type(data) == dict:
+        elif type(data) is dict:
                 data_context_buffer += f"Multi-sheet excel file: {file_name}\n\n"
                 for k in data.keys():
                     data_context_buffer += f"   Sheet name: {k}\n\n{data[k].head()}\n\n"
-        elif type(data) == str:
+        elif type(data) is str:
                 if len(data) <= BUFFER_LENGTH:
                     data_context_buffer += f"{file_name}\n\n{data}\n\n"
                 else:
                     data_context_buffer += f"CONTEXT FOR {file_name}\n\n{data[:BUFFER_LENGTH]}\n\n"
         else:
             data_context_buffer += f"{data[:BUFFER_LENGTH]}\n\n"
-    except ValueError as ve:
+    except ValueError:
         data = session.get_object_bytes(file_name).decode("utf-8")
         data_context_buffer += f"{data}]\n\nn"
-    except IOError as ie:
+    except IOError:
         return data_context_buffer
 
     return data_context_buffer
@@ -203,7 +202,7 @@ async def vega_chart(
                 else:
                     retry_no += 1
 
-            except Exception as e:
+            except Exception:
                 return None
 
     return None
@@ -266,7 +265,7 @@ class BPAgent:
         if proc_step.manifest:
             manifest_model = proc_step.manifest.get("model")
             if manifest_model:
-                model_name = manifest_model.get("model_name")
+                manifest_model.get("model_name")
 
         # Handle special case where a LLM step picks from a list of manifests to run
         if proc_step.name == "dispatched":
@@ -385,7 +384,7 @@ class BPAgent:
                         )
                     else:
                         yield FlowLog(
-                            error=f"[BPAgent][run_proc] Failed to generate image..."
+                            error="[BPAgent][run_proc] Failed to generate image..."
                         )
                         raise IOError("Failed to generate image")
                 except Exception as e:
@@ -548,7 +547,7 @@ class BPAgent:
                 sub_proc = get_s3_proc(
                     proc_step.name, uid, settings.user_artifact_bucket
                 )
-            except Exception as e:
+            except Exception:
                 raise IOError(f"Could not find sub-process: {proc_step.name}")
             try:
                 async for message in self.run_proc(
@@ -711,7 +710,7 @@ class BPAgent:
                 )
 
             # Call the LLM
-            res, function_call = None, None
+            res, _function_call = None, None
             retry_attempts = 0
             while retry_attempts < proc.server_config.max_retries and not res:
                 if proc_step:
@@ -765,8 +764,8 @@ class BPAgent:
             )
             """
 
-        except (NoCredentialsError, PartialCredentialsError) as e:
-            yield FlowLog(error=f"[Assistant][call_llm] AWS credential error")
+        except (NoCredentialsError, PartialCredentialsError):
+            yield FlowLog(error="[Assistant][call_llm] AWS credential error")
         except Exception as e:
             yield FlowLog(
                 error=f"[Assistant][call_llm] Uncaught error while making inference: {e}"
@@ -1191,7 +1190,8 @@ class BPAgent:
                                 step_str += f"{newline_str}{step_output.data}"
                         if step_output.data is not None:
                             step_input = step_output.data
-                        else: step_input = step_output.text
+                        else:
+                            step_input = step_output.text
 
                 # Send token to stop spinning
                 if is_spinning:
@@ -1216,7 +1216,7 @@ class BPAgent:
                 # TODO(lucas): Chat history for hosted models
                 if proc_step.manifest:
                     if proc_step.manifest.get("model"):
-                        model = proc_step.manifest.get("model")
+                        proc_step.manifest.get("model")
                         if (
                             proc_step.manifest.get("model").get("model_name")
                             == "tne-bigtext-arxiv"
@@ -1318,7 +1318,7 @@ class BPAgent:
                             evaluation = anns[embedding_id].evaluation
                             if text:
                                 yield f"EMBEDDING ID: {embedding_id}\n\n"
-                                yield f"EXTRACTED TEXT:\n\n"
+                                yield "EXTRACTED TEXT:\n\n"
                                 yield f"{text}\n\n"
                             if similarity:
                                 yield f"EMBEDDING ID: {embedding_id}\n\n"
@@ -1345,7 +1345,7 @@ class BPAgent:
 
                     if patch_record.metrics and proc_step.show_debug:
                         metrics = patch_record.metrics
-                        yield f"METRICS:\n\n"
+                        yield "METRICS:\n\n"
                         yield f"ann_count_after_retrival: {metrics.ann_count_after_retrieval}\n"
                         yield f"ann_count_after_similarity_min_value: {metrics.ann_count_after_similarity_min_value}\n"
                         yield f"ann_count_after_relevancy_min_value: {metrics.ann_count_after_relevancy_min_value}\n"
@@ -1356,7 +1356,7 @@ class BPAgent:
                     if not emitted_evaluations and proc_step.show_debug is True:
                         for embedding_id in evaluation_texts.keys():
                             yield f"EMBEDDING ID: {embedding_id}\n\n"
-                            yield f"EVALUATION:\n\n"
+                            yield "EVALUATION:\n\n"
                             yield f"{evaluation_texts[embedding_id]}\n\n"
                         emitted_evaluations = True
                         yield "**END RAG METRICS**\n\n"
@@ -1434,10 +1434,10 @@ class BPAgent:
                     if ann.text:
                         response_str += f"**Text**\n{ann.text}\n\n"
                     if ann.sources:
-                        response_str += f"**Sources**\n"
+                        response_str += "**Sources**\n"
                         for source in ann.sources:
                             response_str += f"  * {source.file_path}\n"
-                        response_str += f"\n"
+                        response_str += "\n"
                     if ann.evaluation:
                         response_str += f"**Evaluation**\n{ann.evaluation}\n"
                     if ann.relevancy:
@@ -1695,7 +1695,7 @@ class BPAgent:
                                 )
                             }
                         )
-                    except Exception as e:
+                    except Exception:
                         pass
                 for k in proc_step.data.keys():
                     if len(k.split(".")) > 1:
@@ -1789,9 +1789,9 @@ class BPAgent:
                     formatted_res = formatted_res.strip("[]").split(",")
                     formatted_res = [i.strip() for i in formatted_res]
                 return formatted_res
-            except Exception as e:
+            except Exception:
                 return FlowLog(
-                    error=f"[Assistant][call_llm] Detected malformed list in LLM response. Likely LLM hallucination."
+                    error="[Assistant][call_llm] Detected malformed list in LLM response. Likely LLM hallucination."
                 )
         else:
             return None

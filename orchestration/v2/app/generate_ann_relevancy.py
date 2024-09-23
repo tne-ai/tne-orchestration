@@ -3,7 +3,7 @@ from typing import List
 
 from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 
-from v2.api.api import EmbeddingId, LlmOutput, RagAnn, RagRecord
+from v2.api.api import EmbeddingId, RagAnn, RagRecord
 from v2.app.messages_util import (
     create_history_messages_without_compression,
     system_message,
@@ -45,7 +45,7 @@ def _create_messages(
                 """
             ),
             system_message(
-                f"""
+                """
                 Please rate the relevancy of the "ADDITIONAL CONTENT" given above.
                 You should rate the relevancy as a real number between 0.0 and 1.0.
                 If the "ADDITIONAL CONTENT" is not at all relevant to the "LATEST USER INPUT", then you should rate the relevancy as 0.0.
@@ -57,7 +57,7 @@ def _create_messages(
                 """
             ),
             system_message(
-                f"""
+                """
                 Now, please rate the relevancy of the "ADDITIONAL CONTENT".
                 """
             ),

@@ -520,9 +520,7 @@ def parse_s3_proc_data_no_regex(text):
             in_nodes_section = True
         elif in_nodes_section and line.startswith("  - id:"):
             # Reset flags when a new node starts
-            current_type = current_title = current_manifest = current_module = (
-                current_file_name
-            ) = ""
+            current_type = current_title = current_manifest = current_module = ""
         elif "type:" in line:
             current_type = line.split(":")[1].strip()
         elif "title:" in line:

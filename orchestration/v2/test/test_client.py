@@ -1,6 +1,5 @@
 import asyncio
 import os
-import readline  # Appears unused, but affects input behaviour.
 import sys
 import time
 import uuid

@@ -1,5 +1,4 @@
 import inspect
-from typing import Callable
 
 import uvicorn
 from fastapi import FastAPI

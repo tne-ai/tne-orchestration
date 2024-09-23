@@ -55,7 +55,7 @@ def _create_messages(
                 """
             ),
             system_message(
-                f"""
+                """
                 Now, please rewrite, elaborate, and clarify the "LATEST USER INPUT" as instructed above.
                 """
             ),

@@ -32,8 +32,8 @@ def _values_are_concat_able(
     _patch_is_concat_able = isinstance(patch, (str, list))
     if basis is None:
         return _patch_is_concat_able
-    assert type(basis) == type(patch)
-    assert _basis_is_concat_able == _patch_is_concat_able
+    assert type(basis) is type(patch)
+    assert _basis_is_concat_able is _patch_is_concat_able
     return _basis_is_concat_able
 
 
@@ -45,7 +45,7 @@ def _values_are_merge_able(
     _patch_is_merge_able = isinstance(patch, (dict, UpdatableModel))
     if basis is None:
         return _patch_is_merge_able
-    assert type(basis) == type(patch)
+    assert type(basis) is type(patch)
     assert _basis_is_merge_able == _patch_is_merge_able
     return _basis_is_merge_able
 
@@ -119,7 +119,7 @@ def _merge_helper(field_tuples):
             assert basis_value is not None
             new_dict[field_name] = basis_value
         else:
-            assert type(basis_value) == type(patch_value)
+            assert type(basis_value) is type(patch_value)
             new_dict[field_name] = updater(basis_value, patch_value)
     return new_dict
 
@@ -163,7 +163,7 @@ def _list_updatable_field_name_and_updater_pairs(
 def _merge_updatable_models(
     basis: UpdatableModel, patch: UpdatableModel
 ) -> UpdatableModel:
-    assert type(basis) == type(patch)
+    assert type(basis) is type(patch)
     field_tuples = []
     for (
         field_name,

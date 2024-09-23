@@ -227,7 +227,7 @@ class RajkumarFormatter:
             except ValueError:
                 # If both conversions fail, it's a string
                 return "str"
-        except Exception as e:
+        except Exception:
             return "str"
 
     def _get_alias(self, v):

@@ -119,9 +119,9 @@ def _format_and_gzip_member(
 
 def _format_and_gzip_footer(gzip_file: gzip.GzipFile):
     formatted_footer = _fix_indentation(
-        f"""
-            }}
-        }}
+        """
+            }
+        }
         """,
         indent_levels=0,
     )
