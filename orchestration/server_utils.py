@@ -33,7 +33,7 @@ PROC_DIR = "Experts"  # DEPRECATED
 EXPERTS_DIR = "Experts"
 AGENT_DIR = "Agents"
 CODE_DIR = "Code"
-DATA_DIR = "Files"
+DATA_DIR = "Data"
 
 OPERATOR_NODES = [
     "llm",
