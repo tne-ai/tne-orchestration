@@ -781,7 +781,7 @@ def __get_step_io_data(incoming_nodes, child_nodes, nodes):
         elif incoming_node.get("type") == "text":
             data_name = incoming_node.get("data").get("textFile")
             data_sources.append(f"{data_name}.txt")
-        elif incoming_node.get("type") == "query":
+        elif incoming_node.get("type") == "text":
             step_input = incoming_node.get("data").get("input")
         elif incoming_node.get("type") == "image":
             data_name = f"{incoming_node.get('data').get('imageFile')}"
