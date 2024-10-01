@@ -29,7 +29,6 @@ from orchestration.v2.api.api import (
 from typing import Union, Dict, Tuple
 
 # Inference server literals
-PROC_DIR = "Experts"  # DEPRECATED
 EXPERTS_DIR = "Experts"
 AGENT_DIR = "Agents"
 CODE_DIR = "Code"
@@ -394,7 +393,7 @@ def get_s3_proc(
         if project:
             proc_s3_path = f"projects/{uid}/{project}-{version}/{EXPERTS_DIR}"
         else:
-            proc_s3_path = f"d/{uid}/{PROC_DIR}"
+            proc_s3_path = f"d/{uid}/{EXPERTS_DIR}"
 
         bucket_contents = s3.list_objects(Bucket=bucket_name, Prefix=proc_s3_path).get(
             "Contents"
