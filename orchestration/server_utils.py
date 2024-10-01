@@ -226,40 +226,6 @@ def get_s3_ls(bucket_name: str, prefix: str) -> str:
     return dir_summary
 
 
-def get_python_s3_module(module_name: str, uid: str, bucket_name: str, project: Optional[str] = None, version: Optional[str] = LATEST):
-    """Load Python code from S3. DEPRECATED - use fetch_python_module() now."""
-    try:
-        s3 = boto3.client("s3")
-
-        if project:
-            python_s3_path = f"projects/{uid}/{project}-{version}/{CODE_DIR}"
-        else:
-            python_s3_path = f"d/{uid}/{CODE_DIR}"
-
-        bucket_contents = s3.list_objects(Bucket=bucket_name, Prefix=python_s3_path).get(
-            "Contents"
-        )
-
-        # Load processes from S3
-        for obj in bucket_contents:
-            basename = obj.get("Key").split("/")[-1].split(".")[0]
-            if basename == module_name:
-                file_name = f"{basename}.py"
-                file_content = (
-                    s3.get_object(Bucket=bucket_name, Key=obj["Key"])["Body"]
-                    .read()
-                    .decode("utf-8")
-                )
-                return file_name, file_content
-
-    except (NoCredentialsError, PartialCredentialsError) as e:
-        raise e
-    except Exception as e:
-        raise e
-
-    return None
-
-
 def fetch_python_module(module_name: str, uid: str, bucket_name: str, project: Optional[str] = None, version: Optional[str] = LATEST):
     """Load Python code from S3"""
     try:
@@ -270,7 +236,6 @@ def fetch_python_module(module_name: str, uid: str, bucket_name: str, project: O
         else:
             python_s3_path = f"d/{uid}/{CODE_DIR}"
 
-        python_s3_path = f"d/{uid}/{CODE_DIR}"
         bucket_contents = s3.list_objects(Bucket=bucket_name, Prefix=python_s3_path).get(
             "Contents"
         )
@@ -296,11 +261,16 @@ def fetch_python_module(module_name: str, uid: str, bucket_name: str, project: O
     return None
 
 
-async def upload_to_s3(file_name, data, uid, bucket_name) -> str:
+async def upload_to_s3(file_name, data, uid, bucket_name, project: Optional[str] = None, version: Optional[str] = LATEST) -> str:
     """Upload an object to S3"""
-    s3_path = f"d/{uid}/{DATA_DIR}"
+    if project:
+        s3_path = f"projects/{uid}/{project}-{version}/{DATA_DIR}"
+    else:
+        s3_path = f"d/{uid}/{DATA_DIR}"
+
     ext = file_name.split(".")[-1]
 
+    # TODO(lucas): Deal with project and versions
     if not data:
         raise ValueError("Attempted to upload null data to S3")
 
@@ -346,7 +316,7 @@ async def upload_to_s3(file_name, data, uid, bucket_name) -> str:
         raise e
 
 
-def get_data_from_s3(file_name: str, uid: str, bucket_name: str, project: Optional[str] = None, version: Optional[str] = None):
+def get_data_from_s3(file_name: str, uid: str, bucket_name: str, project: Optional[str] = None, version: Optional[str] = LATEST):
     s3 = boto3.client("s3")
     if project:
         data_path = f"projects/{uid}/{project}-{version}/{DATA_DIR}"

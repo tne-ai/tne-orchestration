@@ -175,6 +175,8 @@ class BPAgent:
         uid,
         is_spinning,
         show_description=True,
+        project: Optional[str] = None,
+        version: Optional[str] = None,
         history: Optional[List[Dict[str, str]]] = None,
     ) -> AsyncGenerator:
         tracer = trace.get_tracer(__name__)
@@ -191,6 +193,8 @@ class BPAgent:
                 dispatched_input,
                 uid,
                 show_description,
+                project=project,
+                version=version,
                 history=history,
             ):
                 yield message
@@ -203,7 +207,9 @@ class BPAgent:
         step_input,
         dispatched_input,
         uid,
-        show_description=True,
+        show_description = True,
+        project: Optional[str] = None,
+        version: Optional[str] = None,
         history: Optional[List[Dict[str, str]]] = None,
     ) -> AsyncGenerator:
         # TEMPORARY: route all tne-branded models to groq
@@ -244,7 +250,7 @@ class BPAgent:
                 collected_messages = []
                 try:
                     async for message in self.__run_llm_step(
-                        step_input, proc_step, uid, history=history
+                        step_input, proc_step, uid, project=project, version=version, history=history
                     ):
                         if type(message) is not FlowLog:
                             collected_messages.append(message)
@@ -270,6 +276,8 @@ class BPAgent:
                         step_input,
                         proc_step,
                         uid,
+                        project=project,
+                        version=version,
                         history=history,
                     ):
                         if type(message) is FlowLog:
@@ -337,7 +345,7 @@ class BPAgent:
             else:
                 try:
                     async for message in self.__run_llm_step(
-                        step_input, proc_step, uid, history=history
+                        step_input, proc_step, uid, project=project, version=version, history=history
                     ):
                         if type(message) is not FlowLog:
                             llm_step_messages.append(message)
@@ -364,7 +372,7 @@ class BPAgent:
             python_step_resp = None
             try:
                 python_step_resp = await self.__run_python_step(
-                    step_input, proc_step, uid
+                    step_input, proc_step, uid, project=project, version=version
                 )
             except ValueError as e:
                 err_str = e.__str__()
@@ -443,7 +451,7 @@ class BPAgent:
             while retries <= settings.max_retries and not done:
                 try:
                     async for message in self.__run_llm_python_step(
-                        step_input, proc_step, uid, history=history
+                        step_input, proc_step, uid, project=project, version=version, history=history
                     ):
                         if type(message) is LLMResponse:
                             step_output = message
@@ -473,6 +481,8 @@ class BPAgent:
                     sub_proc,
                     uid,
                     is_sub_proc=True,
+                    project=project,
+                    version=version,
                     history=history,
                 ):
                     if type(message) is tuple:
@@ -526,6 +536,8 @@ class BPAgent:
         uid: str,
         manifest: Dict = None,
         use_alias: Optional[bool] = False,
+        project: Optional[str] = None,
+        version: Optional[str] = None,
         history: Optional[List[Dict[str, str]]] = False,
     ) -> AsyncGenerator:
         """Call the LLM (more documentation forthcoming)."""
@@ -554,7 +566,7 @@ class BPAgent:
         if sources and sources[0] != "none":
             for data_source in sources:
                 data_str = None
-                data = get_data_from_s3(data_source, uid, settings.user_artifact_bucket)
+                data = get_data_from_s3(data_source, uid, settings.user_artifact_bucket, project=project, version=version)
                 if type(data) is dict:
                     data = data.get("data")
                 if data is None:
@@ -605,7 +617,7 @@ class BPAgent:
                 # Hack to allow both manifests and processes
                 proc = proc_step.parent
             else:
-                proc = get_s3_proc("Assistant", "SYSTEM", settings.user_artifact_bucket)
+                proc = get_s3_proc("Assistant", "SYSTEM", settings.user_artifact_bucket, project=project, version=version)
 
             # Create session (single-use) and add question
             session = ChatSession(
@@ -636,11 +648,14 @@ class BPAgent:
                         if proc_step.debug_output_name and proc_step.manifest:
                             full_prompt = f"{manifest.get('prompt')}\n\n{question}"
                             try:
+                                # TODO(lucas): deal with this
                                 _ = await upload_to_s3(
                                     proc_step.debug_output_name,
                                     full_prompt,
                                     uid,
                                     settings.user_artifact_bucket,
+                                    project=project,
+                                    version=version
                                 )
                             except Exception as e:
                                 raise e
@@ -675,12 +690,6 @@ class BPAgent:
                     yield FlowLog(error=f"[Assistant][inference] Got error {e}")
                 if not res:
                     retry_attempts += 1
-
-            """
-            yield FlowLog(
-                message=f"[Assistant][inference] Got response from LLM: {res}"
-            )
-            """
 
         except (NoCredentialsError, PartialCredentialsError):
             yield FlowLog(error="[Assistant][call_llm] AWS credential error")
@@ -797,7 +806,7 @@ class BPAgent:
                         proc_name = match.group(1).strip()
                     if proc_name:
                         user_proc = get_s3_proc(
-                            proc_name, uid, settings.user_artifact_bucket
+                            proc_name, uid, settings.user_artifact_bucket, project=project, version=version
                         )
                         # Could not find a matching process
                         if not user_proc:
@@ -823,6 +832,8 @@ class BPAgent:
                         question,
                         user_proc,
                         uid,
+                        project=project,
+                        version=version,
                         history=history,
                         show_description=show_description,
                     ):
@@ -855,6 +866,8 @@ class BPAgent:
         proc: BP,
         uid: str,
         is_sub_proc: Optional[bool] = False,
+        project: Optional[str] = None,
+        version: Optional[str] = None,
         history: Optional[List[Dict[str, str]]] = None,
         step_no: int = 0,
         show_description: bool = True,
@@ -871,6 +884,9 @@ class BPAgent:
                 uid,
                 step_no=step_no,
                 history=history,
+                project=project,
+                version=version,
+                is_sub_proc=is_sub_proc,
                 show_description=show_description,
             ):
                 yield message
@@ -882,6 +898,8 @@ class BPAgent:
         proc: BP,
         uid: str,
         is_sub_proc: Optional[bool] = False,
+        project: Optional[str] = None,
+        version: Optional[str] = None,
         history: Optional[List[Dict[str, str]]] = None,
         step_no: int = 0,
         show_description: bool = True,
@@ -941,6 +959,8 @@ class BPAgent:
                         uid,
                         is_spinning,
                         show_description,
+                        project=project,
+                        version=version,
                         history=history,
                     ):
                         if type(message) is tuple:
@@ -995,6 +1015,9 @@ class BPAgent:
                                 dispatched_input,
                                 uid,
                                 is_spinning,
+                                project=project,
+                                version=version,
+                                history=history
                             )
                         )
                         tasks.append(collector)
@@ -1044,6 +1067,8 @@ class BPAgent:
                                             step_output.data,
                                             uid,
                                             settings.user_artifact_bucket,
+                                            project=project,
+                                            version=version
                                         )
                                     except Exception as e:
                                         raise e
@@ -1122,6 +1147,8 @@ class BPAgent:
         step_input: Union[str, pd.DataFrame],
         proc_step: ProcessStep,
         uid: str,
+        project: Optional[str] = None,
+        version: Optional[str] = None,
         history: Optional[List[Dict[str, str]]] = None,
     ) -> AsyncGenerator:
         retry_no = 0
@@ -1139,6 +1166,8 @@ class BPAgent:
                             proc_step=proc_step,
                             uid=uid,
                             use_alias=False,
+                            project=project,
+                            version=version,
                             history=history,
                         ):
                             if type(message) is not FlowLog:
@@ -1399,6 +1428,7 @@ class BPAgent:
 
         # 1. Use TNE Python SDK package to inject relevant data into LLM prompt
         data_context_buffer = f"UID: {uid}\nBUCKET: {settings.user_artifact_bucket}\n"
+        # TODO(lucas): Update TNE package to support projects, versions
         session = TNE(uid, settings.user_artifact_bucket)
 
         # a. Inject data from graph UI
@@ -1487,9 +1517,11 @@ class BPAgent:
         step_input: Optional[Any],
         proc_step: ProcessStep,
         uid: str,
+        project: Optional[str] = None,
+        version: Optional[str] = None
     ) -> Any:
         module_name, module_code = fetch_python_module(
-            proc_step.name, uid, settings.user_artifact_bucket
+            proc_step.name, uid, settings.user_artifact_bucket, project=project, version=version
         )
 
         # Step input is available through special variable PROCESS_INPUT
