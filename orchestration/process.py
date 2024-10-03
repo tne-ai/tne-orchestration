@@ -51,8 +51,8 @@ if settings.use_local_slashgpt:
 from slashgpt.chat_session import ChatSession
 
 logger = logging.getLogger(__name__)
-BUFFER_LENGTH=20000
-CTX_LENGTH=1000
+BUFFER_LENGTH = 20000
+CTX_LENGTH = 1000
 
 # Literal constants
 TNE_PACKAGE_PATH = "./tne-0.0.1-py3-none-any.whl"
@@ -107,14 +107,16 @@ def update_data_context_buffer(session, file_name, data_context_buffer):
         if type(data) is pd.DataFrame:
             data_context_buffer += f"{file_name}\n\n{data.head().to_string()}\n\n"
         elif type(data) is dict:
-                data_context_buffer += f"Multi-sheet excel file: {file_name}\n\n"
-                for k in data.keys():
-                    data_context_buffer += f"   Sheet name: {k}\n\n{data[k].head()}\n\n"
+            data_context_buffer += f"Multi-sheet excel file: {file_name}\n\n"
+            for k in data.keys():
+                data_context_buffer += f"   Sheet name: {k}\n\n{data[k].head()}\n\n"
         elif type(data) is str:
-                if len(data) <= BUFFER_LENGTH:
-                    data_context_buffer += f"{file_name}\n\n{data}\n\n"
-                else:
-                    data_context_buffer += f"CONTEXT FOR {file_name}\n\n{data[:BUFFER_LENGTH]}\n\n"
+            if len(data) <= BUFFER_LENGTH:
+                data_context_buffer += f"{file_name}\n\n{data}\n\n"
+            else:
+                data_context_buffer += (
+                    f"CONTEXT FOR {file_name}\n\n{data[:BUFFER_LENGTH]}\n\n"
+                )
         else:
             data_context_buffer += f"{data[:BUFFER_LENGTH]}\n\n"
     except ValueError:
@@ -126,8 +128,10 @@ def update_data_context_buffer(session, file_name, data_context_buffer):
     return data_context_buffer
 
 
-def execute_temp_file(file_path: str) -> dict:
-    return runpy.run_path(file_path)
+def execute_temp_file(file_path: str, env_vars: dict) -> dict:
+    exec_namespace = env_vars.copy()
+    result_namespace = runpy.run_path(file_path, init_globals=exec_namespace)
+    return result_namespace
 
 
 def save_code_to_temp_file(code: str) -> str:
@@ -207,7 +211,7 @@ class BPAgent:
         step_input,
         dispatched_input,
         uid,
-        show_description = True,
+        show_description=True,
         project: Optional[str] = None,
         version: Optional[str] = None,
         history: Optional[List[Dict[str, str]]] = None,
@@ -250,7 +254,12 @@ class BPAgent:
                 collected_messages = []
                 try:
                     async for message in self.__run_llm_step(
-                        step_input, proc_step, uid, project=project, version=version, history=history
+                        step_input,
+                        proc_step,
+                        uid,
+                        project=project,
+                        version=version,
+                        history=history,
                     ):
                         if type(message) is not FlowLog:
                             collected_messages.append(message)
@@ -325,6 +334,8 @@ class BPAgent:
                                 response.content,
                                 uid,
                                 settings.user_artifact_bucket,
+                                project=project,
+                                version=version
                             )
                         except Exception as e:
                             raise e
@@ -345,7 +356,12 @@ class BPAgent:
             else:
                 try:
                     async for message in self.__run_llm_step(
-                        step_input, proc_step, uid, project=project, version=version, history=history
+                        step_input,
+                        proc_step,
+                        uid,
+                        project=project,
+                        version=version,
+                        history=history,
                     ):
                         if type(message) is not FlowLog:
                             llm_step_messages.append(message)
@@ -356,9 +372,7 @@ class BPAgent:
                 llm_step_output = "".join(llm_step_messages)
                 # Look for special outputs enclosed within backticks
                 regex_pattern = "```"
-                parsed_resp = self.__parse_llm_response(
-                    llm_step_output, regex_pattern
-                )
+                parsed_resp = self.__parse_llm_response(llm_step_output, regex_pattern)
                 formatted_output = parsed_resp if parsed_resp else llm_step_output
                 if type(formatted_output) is FlowLog:
                     if formatted_output.message:
@@ -451,7 +465,12 @@ class BPAgent:
             while retries <= settings.max_retries and not done:
                 try:
                     async for message in self.__run_llm_python_step(
-                        step_input, proc_step, uid, project=project, version=version, history=history
+                        step_input,
+                        proc_step,
+                        uid,
+                        project=project,
+                        version=version,
+                        history=history,
                     ):
                         if type(message) is LLMResponse:
                             step_output = message
@@ -463,7 +482,9 @@ class BPAgent:
                     retries += 1
                     if retries > settings.max_retries:
                         done = True
-                        raise IOError("Code generation failed. Please reword your question and try again.")
+                        raise IOError(
+                            "Code generation failed. Please reword your question and try again."
+                        )
 
                 yield "\n\n"
 
@@ -566,7 +587,13 @@ class BPAgent:
         if sources and sources[0] != "none":
             for data_source in sources:
                 data_str = None
-                data = get_data_from_s3(data_source, uid, settings.user_artifact_bucket, project=project, version=version)
+                data = get_data_from_s3(
+                    data_source,
+                    uid,
+                    settings.user_artifact_bucket,
+                    project=project,
+                    version=version,
+                )
                 if type(data) is dict:
                     data = data.get("data")
                 if data is None:
@@ -617,7 +644,13 @@ class BPAgent:
                 # Hack to allow both manifests and processes
                 proc = proc_step.parent
             else:
-                proc = get_s3_proc("Assistant", "SYSTEM", settings.user_artifact_bucket, project=project, version=version)
+                proc = get_s3_proc(
+                    "Assistant",
+                    "SYSTEM",
+                    settings.user_artifact_bucket,
+                    project=project,
+                    version=version,
+                )
 
             # Create session (single-use) and add question
             session = ChatSession(
@@ -626,7 +659,6 @@ class BPAgent:
                 agent_name=proc.server_config.agent_name,
             )
             if not is_base64_image(question):
-                # TODO(lucas): Insert history HERE
                 if history:
                     for msg in history:
                         session.append_message(
@@ -648,14 +680,13 @@ class BPAgent:
                         if proc_step.debug_output_name and proc_step.manifest:
                             full_prompt = f"{manifest.get('prompt')}\n\n{question}"
                             try:
-                                # TODO(lucas): deal with this
                                 _ = await upload_to_s3(
                                     proc_step.debug_output_name,
                                     full_prompt,
                                     uid,
                                     settings.user_artifact_bucket,
                                     project=project,
-                                    version=version
+                                    version=version,
                                 )
                             except Exception as e:
                                 raise e
@@ -806,7 +837,11 @@ class BPAgent:
                         proc_name = match.group(1).strip()
                     if proc_name:
                         user_proc = get_s3_proc(
-                            proc_name, uid, settings.user_artifact_bucket, project=project, version=version
+                            proc_name,
+                            uid,
+                            settings.user_artifact_bucket,
+                            project=project,
+                            version=version,
                         )
                         # Could not find a matching process
                         if not user_proc:
@@ -993,10 +1028,13 @@ class BPAgent:
 
                 if type(step_output) is LLMResponse:
                     if step_output.data is not None:
-                        yield FlowLog(message=f"[BPAgent][run_proc] Output for {proc_step.description}: {str(step_output.data)}")
+                        yield FlowLog(
+                            message=f"[BPAgent][run_proc] Output for {proc_step.description}: {str(step_output.data)}"
+                        )
                     elif step_output.text:
                         yield FlowLog(
-                            message=f"[BPAgent][run_proc] Output for {proc_step.description}: {step_output.text}")
+                            message=f"[BPAgent][run_proc] Output for {proc_step.description}: {step_output.text}"
+                        )
             elif type(proc_step) is list:
                 # Emit spinning token for parallel tasks
                 is_spinning = True
@@ -1017,7 +1055,7 @@ class BPAgent:
                                 is_spinning,
                                 project=project,
                                 version=version,
-                                history=history
+                                history=history,
                             )
                         )
                         tasks.append(collector)
@@ -1060,7 +1098,10 @@ class BPAgent:
                             ext = output_file.split(".")[-1]
                             # Uploads step data to S3 data bucket
                             try:
-                                if ext in ["csv", "png", "jpg", "jpeg", "xlsx"] and step_output.data is not None:
+                                if (
+                                    ext in ["csv", "png", "jpg", "jpeg", "xlsx"]
+                                    and step_output.data is not None
+                                ):
                                     try:
                                         await upload_to_s3(
                                             output_file,
@@ -1068,7 +1109,7 @@ class BPAgent:
                                             uid,
                                             settings.user_artifact_bucket,
                                             project=project,
-                                            version=version
+                                            version=version,
                                         )
                                     except Exception as e:
                                         raise e
@@ -1080,6 +1121,8 @@ class BPAgent:
                                                 step_output.text,
                                                 uid,
                                                 settings.user_artifact_bucket,
+                                                project=project,
+                                                version=version
                                             )
                                         except Exception as e:
                                             raise e
@@ -1202,9 +1245,7 @@ class BPAgent:
             nonlocal response_count
             nonlocal start_seconds
             response_count += 1
-            return (
-                log_progress()
-            )
+            return log_progress()
 
         async def on_error(error_code: int, error_str: str):
             yield FlowLog(
@@ -1386,7 +1427,14 @@ class BPAgent:
                 yield "\n"
             raise e
 
-    async def __run_llm_python_code(self, llm_code: str) -> AsyncGenerator:
+    async def __run_llm_python_code(
+        self,
+        llm_code: str,
+        step_input: any,
+        uid: str,
+        project: Optional[str] = None,
+        version: Optional[str] = None,
+    ) -> AsyncGenerator:
         """Code interpreter module; allow the LLMs to generate and run Python code on the data within the BP."""
         if llm_code:
             # Save the LLM-generated code to a temporary file
@@ -1402,7 +1450,14 @@ class BPAgent:
 
             try:
                 # Execute the temporary file and capture the namespace
-                namespace = execute_temp_file(temp_file_path)
+                env_vars = {
+                    "PROCESS_INPUT": step_input,
+                    "BUCKET": settings.user_artifact_bucket,
+                    "UID": uid,
+                    "PROJECT": project,
+                    "VERSION": version,
+                }
+                namespace = execute_temp_file(temp_file_path, env_vars)
 
                 # Access the results from the namespace
                 result = namespace.get("result")
@@ -1419,6 +1474,8 @@ class BPAgent:
         step_input: Any,
         proc_step: ProcessStep,
         uid: str,
+        project: Optional[str] = None,
+        version: Optional[str] = None,
         history: Optional[List[Dict[str, str]]] = None,
     ) -> AsyncGenerator:
         """Generate and run Python code that operates on DataFrames"""
@@ -1427,11 +1484,10 @@ class BPAgent:
         llm_resp = None
 
         # 1. Use TNE Python SDK package to inject relevant data into LLM prompt
-        data_context_buffer = f"UID: {uid}\nBUCKET: {settings.user_artifact_bucket}\n"
-        # TODO(lucas): Update TNE package to support projects, versions
-        session = TNE(uid, settings.user_artifact_bucket)
+        session = TNE(uid, settings.user_artifact_bucket, project=project, version=version)
 
         # a. Inject data from graph UI
+        data_context_buffer = ""
         for s in proc_step.data_sources:
             data_context_buffer = update_data_context_buffer(
                 session, s, data_context_buffer
@@ -1493,7 +1549,7 @@ class BPAgent:
         collected_messages = []
         try:
             async for message in self.__run_llm_python_code(
-                formatted_code,
+                formatted_code, step_input, uid, project=project, version=version
             ):
                 collected_messages.append(message)
 
@@ -1518,14 +1574,24 @@ class BPAgent:
         proc_step: ProcessStep,
         uid: str,
         project: Optional[str] = None,
-        version: Optional[str] = None
+        version: Optional[str] = None,
     ) -> Any:
         module_name, module_code = fetch_python_module(
-            proc_step.name, uid, settings.user_artifact_bucket, project=project, version=version
+            proc_step.name,
+            uid,
+            settings.user_artifact_bucket,
+            project=project,
+            version=version,
         )
 
         # Step input is available through special variable PROCESS_INPUT
-        namespace = {"PROCESS_INPUT": step_input}
+        namespace = {
+            "PROCESS_INPUT": step_input,
+            "BUCKET": settings.user_artifact_bucket,
+            "UID": uid,
+            "PROJECT": project,
+            "VERSION": version,
+        }
 
         # Install the TNE Python SDK into the code execution environment
         try:
@@ -1565,10 +1631,10 @@ class BPAgent:
             try:
                 # FIXME(lucas): this is stupid
                 if (
-                        "[" in formatted_res
-                        and "import" not in formatted_res
-                        and "Announcement" not in formatted_res
-                        and "json" not in formatted_res
+                    "[" in formatted_res
+                    and "import" not in formatted_res
+                    and "Announcement" not in formatted_res
+                    and "json" not in formatted_res
                 ):
                     formatted_res = formatted_res.strip("[]").split(",")
                     formatted_res = [i.strip() for i in formatted_res]

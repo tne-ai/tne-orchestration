@@ -232,7 +232,7 @@ def fetch_python_module(module_name: str, uid: str, bucket_name: str, project: O
         s3 = boto3.client("s3")
 
         if project:
-            python_s3_path = f"projects/{uid}/{project}-{version}/{CODE_DIR}"
+            python_s3_path = f"projects/{project}--{version}/{CODE_DIR}"
         else:
             python_s3_path = f"d/{uid}/{CODE_DIR}"
 
@@ -264,7 +264,7 @@ def fetch_python_module(module_name: str, uid: str, bucket_name: str, project: O
 async def upload_to_s3(file_name, data, uid, bucket_name, project: Optional[str] = None, version: Optional[str] = LATEST) -> str:
     """Upload an object to S3"""
     if project:
-        s3_path = f"projects/{uid}/{project}-{version}/{DATA_DIR}"
+        s3_path = f"projects/{project}--{version}/{DATA_DIR}"
     else:
         s3_path = f"d/{uid}/{DATA_DIR}"
 
@@ -319,7 +319,7 @@ async def upload_to_s3(file_name, data, uid, bucket_name, project: Optional[str]
 def get_data_from_s3(file_name: str, uid: str, bucket_name: str, project: Optional[str] = None, version: Optional[str] = LATEST):
     s3 = boto3.client("s3")
     if project:
-        data_path = f"projects/{uid}/{project}-{version}/{DATA_DIR}"
+        data_path = f"projects/{project}--{version}/{DATA_DIR}"
     else:
         data_path = f"d/{uid}/{DATA_DIR}"
     bucket_contents = s3.list_objects(
@@ -361,7 +361,7 @@ def get_s3_proc(
 
         # Construct S3 path
         if project:
-            proc_s3_path = f"projects/{uid}/{project}-{version}/{EXPERTS_DIR}"
+            proc_s3_path = f"projects/{project}--{version}/{EXPERTS_DIR}"
         else:
             proc_s3_path = f"d/{uid}/{EXPERTS_DIR}"
 

@@ -62,7 +62,7 @@ class BP:
 
         # LLM configs
         if project:
-            manifest_s3_path = f"projects/{self.uid}/{project}-{version}/manifests"
+            manifest_s3_path = f"projects/{project}--{version}/{AGENT_DIR}"
         else:
             manifest_s3_path = f"d/{self.uid}/{AGENT_DIR}"
         self.slashgpt_config = ChatConfigWithManifests(
