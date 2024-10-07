@@ -1027,20 +1027,23 @@ class BPAgent:
                 step_output = collected_messages[-1]
 
                 if type(step_output) is LLMResponse:
-                    if (
-                        step_output.data is not None
-                        and proc_step.manifest.get("model").get("model_name")
-                        not in image_models
-                    ):
-                        yield FlowLog(
-                            message=f"[BPAgent][run_proc] Output for {proc_step.description}: {str(step_output.data)}"
-                        )
+                    if step_output.data is not None:
+                        if proc_step.manifest:
+                            if not proc_step.manifest.get("model").get("model_name") in image_models:
+                                yield FlowLog(
+                                    message=f"[BPAgent][run_proc] Output for {proc_step.description}: {str(step_output.data)}"
+                                )
+                        else:
+                            yield FlowLog(
+                                message=f"[BPAgent][run_proc] Output for {proc_step.description}: {str(step_output.data)}"
+                            )
                     elif step_output.text:
                         yield FlowLog(
                             message=f"[BPAgent][run_proc] Output for {proc_step.description}: {step_output.text}"
                         )
-                        if proc_step.manifest.get("model").get("model_name") in image_models:
-                            yield step_output.text
+                        if proc_step.manifest:
+                            if proc_step.manifest.get("model").get("model_name") in image_models:
+                                yield step_output.text
 
             elif type(proc_step) is list:
                 # Emit spinning token for parallel tasks
@@ -1450,7 +1453,7 @@ class BPAgent:
             # Install the TNE Python SDK into the code execution environment
             try:
                 subprocess.check_call(
-                    [sys.executable, "-m", "pip", "install", TNE_PACKAGE_PATH]
+                    [sys.executable, "-m", "pip", "install", "--force-reinstall", TNE_PACKAGE_PATH]
                 )
             except subprocess.CalledProcessError as e:
                 raise e
