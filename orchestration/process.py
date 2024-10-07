@@ -335,7 +335,7 @@ class BPAgent:
                                 uid,
                                 settings.user_artifact_bucket,
                                 project=project,
-                                version=version
+                                version=version,
                             )
                         except Exception as e:
                             raise e
@@ -1027,7 +1027,11 @@ class BPAgent:
                 step_output = collected_messages[-1]
 
                 if type(step_output) is LLMResponse:
-                    if step_output.data is not None:
+                    if (
+                        step_output.data is not None
+                        and proc_step.manifest.get("model").get("model_name")
+                        not in image_models
+                    ):
                         yield FlowLog(
                             message=f"[BPAgent][run_proc] Output for {proc_step.description}: {str(step_output.data)}"
                         )
@@ -1035,6 +1039,9 @@ class BPAgent:
                         yield FlowLog(
                             message=f"[BPAgent][run_proc] Output for {proc_step.description}: {step_output.text}"
                         )
+                        if proc_step.manifest.get("model").get("model_name") in image_models:
+                            yield step_output.text
+
             elif type(proc_step) is list:
                 # Emit spinning token for parallel tasks
                 is_spinning = True
@@ -1122,7 +1129,7 @@ class BPAgent:
                                                 uid,
                                                 settings.user_artifact_bucket,
                                                 project=project,
-                                                version=version
+                                                version=version,
                                             )
                                         except Exception as e:
                                             raise e
@@ -1484,7 +1491,9 @@ class BPAgent:
         llm_resp = None
 
         # 1. Use TNE Python SDK package to inject relevant data into LLM prompt
-        session = TNE(uid, settings.user_artifact_bucket, project=project, version=version)
+        session = TNE(
+            uid, settings.user_artifact_bucket, project=project, version=version
+        )
 
         # a. Inject data from graph UI
         data_context_buffer = ""
