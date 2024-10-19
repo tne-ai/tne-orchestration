@@ -1471,6 +1471,8 @@ class BPAgent:
 
                 # Access the results from the namespace
                 result = namespace.get("result")
+                if not result:
+                    result = namespace.get("tote_range_segment")
             except Exception as e:
                 raise CodeRunError(e)
             finally:
@@ -1514,17 +1516,27 @@ class BPAgent:
         code_gen_proc = get_s3_proc("CodeGen", "SYSTEM", settings.user_artifact_bucket)
         code_gen_manifest = code_gen_proc.manifests.get("codeGenerator")
         if proc_step.model_name:
-            code_gen_manifest["model"] = {
-                "engine_name": proc_step.engine_name,
-                "model_name": proc_step.model_name,
-                "api_key": proc_step.api_key,
-            }
-        code_gen_prompt = f"{data_context_buffer}\n\n{code_gen_manifest.get('prompt')}"
-        if proc_step.prompt:
-            code_gen_prompt = (
-                f"{code_gen_prompt}\n\nPROMPT FROM USER: {proc_step.prompt}"
-            )
-        code_gen_manifest["prompt"] = code_gen_prompt
+            if proc_step.model_name == "echo-ie":
+                code_gen_manifest["model"] = {
+                    "engine_name": "ollama",
+                    "model_name": proc_step.model_name,
+                    "api_key": proc_step.api_key
+                }
+            else:
+                code_gen_manifest["model"] = {
+                    "engine_name": proc_step.engine_name,
+                    "model_name": proc_step.model_name,
+                    "api_key": proc_step.api_key,
+                }
+        if code_gen_manifest.get("model").get("engine_name") != "ollama":
+            code_gen_prompt = f"{data_context_buffer}\n\n{code_gen_manifest.get('prompt')}"
+            if proc_step.prompt:
+                code_gen_prompt = (
+                    f"{code_gen_prompt}\n\nPROMPT FROM USER: {proc_step.prompt}"
+                )
+            code_gen_manifest["prompt"] = code_gen_prompt
+        else:
+            code_gen_manifest["prompt"] = ""
         while retry_no < proc_step.parent.server_config.max_retries and not llm_resp:
             collected_messages = []
             async for message in self.process_llm(
@@ -1548,13 +1560,14 @@ class BPAgent:
         if type(parsed_resp) is str:
             if "python" in parsed_resp:
                 formatted_code = parsed_resp.split("python\n")[1]
+            elif "polsars" in parsed_resp:
+                formatted_code = parsed_resp.split("polsars\n")[1]
             else:
                 formatted_code = parsed_resp
 
         # The LLM didn't generate code; likely because of a conversational, non-data question
         else:
             formatted_code = llm_resp
-
         yield FlowLog(message=f"[BPAgent][run_proc] Generated code: {formatted_code}")
 
         # Run the generated code
@@ -1626,6 +1639,10 @@ class BPAgent:
         code_block_match = re.search(r"```python(.*?)```", res, re.DOTALL)
         if code_block_match:
             return code_block_match.group(1).strip()
+        else:
+            polars_block_match = re.search(r"```polsars(.*?)```", res, re.DOTALL)
+            if polars_block_match:
+                return polars_block_match.group(1).strip()
 
         # Look for other markdown if not found
         match = None
