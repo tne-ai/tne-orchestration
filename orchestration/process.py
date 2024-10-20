@@ -1501,6 +1501,7 @@ class BPAgent:
                         "rising_styles",
                         "clutch_range",
                         "backpack_range_selling_well_june",
+                        "top_crossbody_bags"
                     ]
                     while result is None:
                         temp_key = temp_hardcoded_keys[i]
