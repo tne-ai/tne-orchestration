@@ -56,7 +56,7 @@ CTX_LENGTH = 1000
 
 # Literal constants
 TNE_PACKAGE_PATH = "./tne-0.0.1-py3-none-any.whl"
-DATA_DIR = "Files"
+DATA_DIR = "Data"
 image_models = ["dall-e-3"]
 
 smr_client = boto3.client("sagemaker-runtime")  # type: SageMakerRuntimeClient
