@@ -638,6 +638,12 @@ class BPAgent:
             else:
                 manifest["images"] = [question]
 
+        # FIXME(lucas): Hardcoded
+        if manifest.get("model").get("model_name") == "echo-chat":
+            manifest["model"]["engine_name"] = "ollama"
+            manifest["model"]["api_key"] = "OPENAI_API_KEY"
+            manifest["prompt"] = ""
+
         # Initialize a process
         try:
             if proc_step:
