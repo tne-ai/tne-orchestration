@@ -1029,7 +1029,10 @@ class BPAgent:
                 if type(step_output) is LLMResponse:
                     if step_output.data is not None:
                         if proc_step.manifest:
-                            if not proc_step.manifest.get("model").get("model_name") in image_models:
+                            if (
+                                not proc_step.manifest.get("model").get("model_name")
+                                in image_models
+                            ):
                                 yield FlowLog(
                                     message=f"[BPAgent][run_proc] Output for {proc_step.description}: {str(step_output.data)}"
                                 )
@@ -1042,7 +1045,10 @@ class BPAgent:
                             message=f"[BPAgent][run_proc] Output for {proc_step.description}: {step_output.text}"
                         )
                         if proc_step.manifest:
-                            if proc_step.manifest.get("model").get("model_name") in image_models:
+                            if (
+                                proc_step.manifest.get("model").get("model_name")
+                                in image_models
+                            ):
                                 yield step_output.text
 
             elif type(proc_step) is list:
@@ -1453,7 +1459,14 @@ class BPAgent:
             # Install the TNE Python SDK into the code execution environment
             try:
                 subprocess.check_call(
-                    [sys.executable, "-m", "pip", "install", "--force-reinstall", TNE_PACKAGE_PATH]
+                    [
+                        sys.executable,
+                        "-m",
+                        "pip",
+                        "install",
+                        "--force-reinstall",
+                        TNE_PACKAGE_PATH,
+                    ]
                 )
             except subprocess.CalledProcessError as e:
                 raise e
@@ -1471,8 +1484,25 @@ class BPAgent:
 
                 # Access the results from the namespace
                 result = namespace.get("result")
-                if not result:
-                    result = namespace.get("tote_range_segment")
+
+                if result is None:
+                    i = 0
+                    temp_hardcoded_keys = [
+                        "tote_range_segments",
+                        "tote_sales_percentage",
+                        "newness_range_monthly_sales",
+                        "tote_contribution",
+                        "rising_styles",
+                        "clutch_range",
+                        "backpack_range_selling_well_june",
+                    ]
+                    while result is None:
+                        temp_key = temp_hardcoded_keys[i]
+                        result = namespace.get(temp_key)
+                        if result is not None:
+                            result = result.to_pandas()
+                        i += 1
+
             except Exception as e:
                 raise CodeRunError(e)
             finally:
@@ -1520,7 +1550,7 @@ class BPAgent:
                 code_gen_manifest["model"] = {
                     "engine_name": "ollama",
                     "model_name": proc_step.model_name,
-                    "api_key": proc_step.api_key
+                    "api_key": proc_step.api_key,
                 }
             else:
                 code_gen_manifest["model"] = {
@@ -1529,7 +1559,9 @@ class BPAgent:
                     "api_key": proc_step.api_key,
                 }
         if code_gen_manifest.get("model").get("engine_name") != "ollama":
-            code_gen_prompt = f"{data_context_buffer}\n\n{code_gen_manifest.get('prompt')}"
+            code_gen_prompt = (
+                f"{data_context_buffer}\n\n{code_gen_manifest.get('prompt')}"
+            )
             if proc_step.prompt:
                 code_gen_prompt = (
                     f"{code_gen_prompt}\n\nPROMPT FROM USER: {proc_step.prompt}"
@@ -1640,9 +1672,9 @@ class BPAgent:
         if code_block_match:
             return code_block_match.group(1).strip()
         else:
-            polars_block_match = re.search(r"```polsars(.*?)```", res, re.DOTALL)
-            if polars_block_match:
-                return polars_block_match.group(1).strip()
+            PYTHON_TAG_LENGTH = 14
+            code_block_match = res[(res.find("<|python_tag|>") + PYTHON_TAG_LENGTH):]
+            return code_block_match
 
         # Look for other markdown if not found
         match = None
