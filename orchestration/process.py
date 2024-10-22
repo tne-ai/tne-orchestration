@@ -302,29 +302,8 @@ class BPAgent:
                         settings.user_artifact_bucket, data_s3_path
                     )
 
-                    assistant_proc = get_s3_proc(
-                        "Assistant", "SYSTEM", settings.user_artifact_bucket
-                    )
-                    filename_gen_manifest = assistant_proc.manifests.get(
-                        "imageFilename"
-                    )
-                    filename_gen_manifest["prompt"] = (
-                        filename_gen_manifest["prompt"] + f"\n\n{data_filenames}"
-                    )
-
-                    collected_messages = []
-                    try:
-                        async for message in self.process_llm(
-                            img_url,
-                            None,
-                            uid,
-                            filename_gen_manifest,
-                        ):
-                            if type(message) is not FlowLog:
-                                collected_messages.append(message)
-                        img_filename = "".join(collected_messages)
-                    except Exception as e:
-                        raise e
+                    datetime = str(time.time()).split(".")
+                    img_filename = f"{datetime[0]}-{datetime[1]}.png"
 
                     response = requests.get(img_url)
                     if response.status_code == 200:
@@ -343,6 +322,7 @@ class BPAgent:
                         step_output.data = base64.b64encode(response.content).decode(
                             "utf-8"
                         )
+                        yield step_output.text
                         yield FlowLog(
                             message=f"[BPAgent][run_proc] Uploaded {img_filename} to S3..."
                         )
@@ -1013,7 +993,7 @@ class BPAgent:
                             collected_messages.append(message[0])
                             yield message
                         else:
-                            if type(message) is str:
+                            if type(message) is str and not is_base64_image(message):
                                 message = replace_escaped_newlines(message)
                             collected_messages.append(message)
                             yield message, not proc_step.suppress_output
@@ -1043,9 +1023,10 @@ class BPAgent:
                                     message=f"[BPAgent][run_proc] Output for {proc_step.description}: {str(step_output.data)}"
                                 )
                         else:
-                            yield FlowLog(
-                                message=f"[BPAgent][run_proc] Output for {proc_step.description}: {str(step_output.data)}"
-                            )
+                            if not is_base64_image(step_output.data):
+                                yield FlowLog(
+                                    message=f"[BPAgent][run_proc] Output for {proc_step.description}: {str(step_output.data)}"
+                                )
                     elif step_output.text:
                         yield FlowLog(
                             message=f"[BPAgent][run_proc] Output for {proc_step.description}: {step_output.text}"
@@ -1171,8 +1152,8 @@ class BPAgent:
                             newline_str = "\n\n"
                         if type(step_output.data) is pd.DataFrame:
                             step_str += f"{newline_str}{step_output.data.head()}"
-                        elif type(step_output.data) is str:
-                            step_str += f"{newline_str}{step_output.data}"
+                        elif type(step_output.data) is str and not is_base64_image(step_output.data):
+                                step_str += f"{newline_str}{step_output.data}"
                     step_input += step_str
                 elif proc_step.output_type == "dispatch":
                     # Load the next manifest from possible_outputs dictionary
