@@ -1659,6 +1659,9 @@ class BPAgent:
         code_block_match = re.search(r"```python(.*?)```", res, re.DOTALL)
         if code_block_match:
             return code_block_match.group(1).strip()
+        polars_block_match = re.search(r"```polsars(.*?)```", res, re.DOTALL)
+        if polars_block_match:
+            return polars_block_match.group(1).strip()
         else:
             PYTHON_TAG_LENGTH = 14
             code_block_match = res[(res.find("<|python_tag|>") + PYTHON_TAG_LENGTH):]
