@@ -1664,8 +1664,10 @@ class BPAgent:
             return polars_block_match.group(1).strip()
         else:
             PYTHON_TAG_LENGTH = 14
-            code_block_match = res[(res.find("<|python_tag|>") + PYTHON_TAG_LENGTH):]
-            return code_block_match
+            python_tag_ind = res.find("<|python_tag|>")
+            if python_tag_ind > -1:
+                code_block_match = res[(python_tag_ind + PYTHON_TAG_LENGTH):]
+                return code_block_match
 
         # Look for other markdown if not found
         match = None
