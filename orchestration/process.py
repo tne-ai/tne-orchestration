@@ -186,6 +186,11 @@ class BPAgent:
         tracer = trace.get_tracer(__name__)
         fun_name = "BPAgent.run_step"
         span_name = f'{fun_name}("{proc_step.type}", "{proc_step.name}")'
+
+        # Disable project description text
+        if project or version:
+            show_description = False
+
         with tracer.start_as_current_span(span_name) as span:
             span.set_attribute("tne.orchestration.fun_name", fun_name)
             span.set_attribute("tne.orchestration.step_type", proc_step.type)
