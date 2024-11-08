@@ -264,7 +264,7 @@ def fetch_python_module(module_name: str, uid: str, bucket_name: str, project: O
 async def upload_to_s3(file_name, data, uid, bucket_name, project: Optional[str] = None, version: Optional[str] = LATEST) -> str:
     """Upload an object to S3"""
     ext = file_name.split(".")[-1]
-    upload_dir = CODE_DIR if ext is "py" else DATA_DIR
+    upload_dir = CODE_DIR if ext == "py" else DATA_DIR
     if project:
         s3_path = f"projects/{project}--{version}/{upload_dir}"
     else:
