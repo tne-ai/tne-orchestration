@@ -658,6 +658,7 @@ def __construct_step_dict(
             "name": node.get("data").get("module"),
             "type": "python_code",
             "description": node.get("data").get("title"),
+            "data_sources": data_sources,
             "output_type": node.get("data").get("outputType"),
             "suppress_output": node.get("data").get("outputToCanvas"),
             "input": step_input,

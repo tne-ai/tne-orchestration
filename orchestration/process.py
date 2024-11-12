@@ -191,22 +191,25 @@ class BPAgent:
         if project or version:
             show_description = False
 
-        with tracer.start_as_current_span(span_name) as span:
-            span.set_attribute("tne.orchestration.fun_name", fun_name)
-            span.set_attribute("tne.orchestration.step_type", proc_step.type)
-            span.set_attribute("tne.orchestration.step_name", proc_step.name)
-            async for message in self.__run_step_inner_impl(
-                proc_step,
-                proc,
-                step_input,
-                dispatched_input,
-                uid,
-                show_description,
-                project=project,
-                version=version,
-                history=history,
-            ):
-                yield message
+        try:
+            with tracer.start_as_current_span(span_name) as span:
+                span.set_attribute("tne.orchestration.fun_name", fun_name)
+                span.set_attribute("tne.orchestration.step_type", proc_step.type)
+                span.set_attribute("tne.orchestration.step_name", proc_step.name)
+                async for message in self.__run_step_inner_impl(
+                    proc_step,
+                    proc,
+                    step_input,
+                    dispatched_input,
+                    uid,
+                    show_description,
+                    project=project,
+                    version=version,
+                    history=history,
+                ):
+                    yield message
+        except Exception as e:
+            raise e
 
     # Only __run_step should call __run_step_inner_impl.
     async def __run_step_inner_impl(
@@ -366,51 +369,10 @@ class BPAgent:
                 elif type(formatted_output) is str or type(formatted_output) is list:
                     step_output.text = formatted_output
 
-        # Run Python code and may return text or data - DEPRECATED
-        elif proc_step.type == "python":
-            python_step_resp = None
-            try:
-                python_step_resp = await self.__run_python_step(
-                    step_input, proc_step, uid, project=project, version=version
-                )
-            except ValueError as e:
-                err_str = e.__str__()
-                step_output.text = f"Received the following error during code execution. Please adjust accordingly and try again.\n\n{err_str}"
-                yield step_output.text
-                yield "\n"
-            if type(python_step_resp) is str:
-                step_output.text = python_step_resp
-                yield python_step_resp
-                yield "\n"
-            elif type(python_step_resp) is tuple:
-                step_output.text = python_step_resp[0]
-                step_output.data = python_step_resp[1]
-                if type(step_output.data) is pd.DataFrame:
-                    yield tabulate(
-                        step_output.data.head(),
-                        headers="keys",
-                        tablefmt="pipe",
-                        showindex=False,
-                    )
-                elif type(step_output.data) is str:
-                    yield step_output.data
-                yield "\n\n"
-            elif type(python_step_resp) is pd.DataFrame:
-                step_output.data = python_step_resp
-                yield tabulate(
-                    step_output.data.head(),
-                    headers="keys",
-                    tablefmt="pipe",
-                    showindex=False,
-                )
-                yield "\n\n"
-            else:
-                raise NotImplementedError
-
         elif proc_step.type == "python_code":
             try:
                 python_step_resp = await self.__run_python_code(
-                    step_input, proc_step, uid
+                    step_input, proc_step, uid, project=project, version=version
                 )
             except Exception as e:
                 raise e
@@ -901,21 +863,24 @@ class BPAgent:
         tracer = trace.get_tracer(__name__)
         fun_name = "BPAgent.run_proc"
         span_name = f'{fun_name}("{proc.name}")'
-        with tracer.start_as_current_span(span_name) as span:
-            span.set_attribute("tne.orchestration.fun_name", fun_name)
-            span.set_attribute("tne.orchestration.proc_name", proc.name)
-            async for message in self.run_proc_inner_impl(
-                question,
-                proc,
-                uid,
-                step_no=step_no,
-                history=history,
-                project=project,
-                version=version,
-                is_sub_proc=is_sub_proc,
-                show_description=show_description,
-            ):
-                yield message
+        try:
+            with tracer.start_as_current_span(span_name) as span:
+                span.set_attribute("tne.orchestration.fun_name", fun_name)
+                span.set_attribute("tne.orchestration.proc_name", proc.name)
+                async for message in self.run_proc_inner_impl(
+                    question,
+                    proc,
+                    uid,
+                    step_no=step_no,
+                    history=history,
+                    project=project,
+                    version=version,
+                    is_sub_proc=is_sub_proc,
+                    show_description=show_description,
+                ):
+                    yield message
+        except Exception as e:
+            raise e
 
     # Only run_proc should call run_proc_inner_impl.
     async def run_proc_inner_impl(
@@ -1633,26 +1598,35 @@ class BPAgent:
             project=project,
             version=version,
         )
-
-        # Step input is available through special variable PROCESS_INPUT
-        namespace = {
-            "PROCESS_INPUT": step_input,
-            "BUCKET": settings.user_artifact_bucket,
-            "UID": uid,
-            "PROJECT": project,
-            "VERSION": version,
-        }
+        temp_file_path = save_code_to_temp_file(module_code)
 
         # Install the TNE Python SDK into the code execution environment
         try:
             subprocess.check_call(
-                [sys.executable, "-m", "pip", "install", TNE_PACKAGE_PATH]
+                [
+                    sys.executable,
+                    "-m",
+                    "pip",
+                    "install",
+                    "--force-reinstall",
+                    TNE_PACKAGE_PATH,
+                ]
             )
         except subprocess.CalledProcessError as e:
-            return {"error": str(e)}
+            raise e
+
+        # Step input is available through special variable PROCESS_INPUT
+        env_vars = {
+            "PROCESS_INPUT": step_input,
+            "BUCKET": settings.user_artifact_bucket,
+            "UID": uid,
+            "INPUT_FILES": proc_step.data_sources,
+            "PROJECT": project,
+            "VERSION": version,
+        }
 
         try:
-            exec(f'__name__ = "__main__"\n{module_code}', {}, namespace)
+            namespace = execute_temp_file(temp_file_path, env_vars)
         except Exception as e:
             raise e
 
