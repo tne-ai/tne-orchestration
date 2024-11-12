@@ -37,7 +37,6 @@ DATA_DIR = "Data"
 OPERATOR_NODES = [
     "llm",
     "proc",
-    "python",
     "python_code",
     "code_generation",
     "rag",
@@ -623,33 +622,6 @@ def __construct_step_dict(
         else:
             return step_dict
 
-    # Code node - DEPRECATED, but kept here for backwards legacy compatibility
-    elif node.get("type") == "python":
-        kwargs = {}
-        graph_kwargs = node.get("data").get("kwargs")
-        if graph_kwargs:
-            if len(graph_kwargs) > 0:
-                for line in graph_kwargs.split("\n"):
-                    kwarg, value = line.split(":")
-                    kwargs[kwarg.strip()] = value.strip()
-
-        step_dict = {
-            "name": node.get("data").get("module"),
-            "type": "python",
-            "description": node.get("data").get("title"),
-            "output_type": node.get("data").get("outputType"),
-            "suppress_output": node.get("data").get("outputToCanvas"),
-            "data_sources": data_sources,
-            "kwargs": kwargs,
-            "input": step_input,
-        }
-
-        if output_files:
-            step_dict["output_files"] = output_files
-        if sql_queries:
-            step_dict["sql_queries"] = sql_queries
-
-        return step_dict
 
     # Code node
     elif node.get("type") == "python_code":
