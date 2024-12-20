@@ -984,6 +984,8 @@ class BPAgent:
                                 in image_models
                             ):
                                 yield step_output.text
+                        elif proc_step.type == "python_code":
+                            yield step_output.text
 
             elif type(proc_step) is list:
                 # Emit spinning token for parallel tasks
