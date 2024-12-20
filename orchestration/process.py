@@ -376,34 +376,11 @@ class BPAgent:
                 )
             except Exception as e:
                 raise e
-            if type(python_step_resp) is str:
-                step_output.text = python_step_resp
-                yield python_step_resp
-                yield "\n"
-            elif type(python_step_resp) is tuple:
-                step_output.text = python_step_resp[0]
-                step_output.data = python_step_resp[1]
-                if type(step_output.data) is pd.DataFrame:
-                    yield tabulate(
-                        step_output.data.head(),
-                        headers="keys",
-                        tablefmt="pipe",
-                        showindex=False,
-                    )
-                elif type(step_output.data) is str:
-                    yield step_output.data
-                yield "\n\n"
-            elif type(python_step_resp) is pd.DataFrame:
-                step_output.data = python_step_resp
-                yield tabulate(
-                    step_output.data.head(),
-                    headers="keys",
-                    tablefmt="pipe",
-                    showindex=False,
-                )
-                yield "\n\n"
+
+            if type(python_step_resp) is LLMResponse:
+                step_output = python_step_resp
             else:
-                raise NotImplementedError
+                yield python_step_resp
 
         # Generate + run Python code
         elif proc_step.type == "code_generation":
@@ -1630,7 +1607,7 @@ class BPAgent:
         except Exception as e:
             raise e
 
-        return namespace.get("result")
+        return LLMResponse(data=namespace.get("result"))
 
     @classmethod
     def __parse_llm_response(cls, res, pattern) -> Union[str, FlowLog]:
