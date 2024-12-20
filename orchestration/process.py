@@ -90,7 +90,7 @@ class FlowLog(BaseModel):
 class LLMResponse(BaseModel):
     text: Optional[str] = None
     """Text outputted by the LLM"""
-    data: Optional[Union[str, pd.DataFrame]] = None
+    data: Optional[Union[str, pd.DataFrame, dict]] = None
     """Data outputted by the LLM"""
 
     class Config:
