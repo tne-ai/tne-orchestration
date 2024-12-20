@@ -1607,7 +1607,7 @@ class BPAgent:
         except Exception as e:
             raise e
 
-        return LLMResponse(data=namespace.get("result"))
+        return LLMResponse(text=namespace.get("result"))
 
     @classmethod
     def __parse_llm_response(cls, res, pattern) -> Union[str, FlowLog]:
