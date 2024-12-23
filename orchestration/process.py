@@ -354,7 +354,7 @@ class BPAgent:
                         if type(message) is not FlowLog:
                             llm_step_messages.append(message)
                         yield message
-                    yield "\n"
+                    yield "\n\n"
                 except Exception as e:
                     raise e
                 llm_step_output = "".join(llm_step_messages)
@@ -381,6 +381,8 @@ class BPAgent:
                 step_output = python_step_resp
             else:
                 yield python_step_resp
+
+            yield "\n\n"
 
         # Generate + run Python code
         elif proc_step.type == "code_generation":
@@ -437,6 +439,8 @@ class BPAgent:
                             yield message
                     else:
                         yield message
+
+                    yield "\n\n"
             except Exception as e:
                 raise e
 
@@ -1606,10 +1610,10 @@ class BPAgent:
 
         try:
             namespace = execute_temp_file(temp_file_path, env_vars)
+            return LLMResponse(text=namespace.get("result"))
         except Exception as e:
-            raise e
+            return LLMResponse(text=str(e))
 
-        return LLMResponse(text=namespace.get("result"))
 
     @classmethod
     def __parse_llm_response(cls, res, pattern) -> Union[str, FlowLog]:
