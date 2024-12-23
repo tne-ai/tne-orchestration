@@ -216,7 +216,7 @@ class ProcessStep:
         self.tool_json = proc_step.get("tool_json")
         self.tool_code = proc_step.get("tool_code")
         self.rag_db_name = proc_step.get("rag_db_name")
-        self.suppress_output = proc_step.get("suppress_output")
+        self.output_to_canvas = proc_step.get("output_to_canvas")
         self.show_debug = proc_step.get("show_debug")
         self.max_count = proc_step.get("max_count")
         self.min_similarity = proc_step.get("min_similarity")

@@ -382,7 +382,8 @@ class BPAgent:
             else:
                 yield python_step_resp
 
-            yield "\n\n"
+            if not proc_step.output_to_canvas:
+                yield "\n\n"
 
         # Generate + run Python code
         elif proc_step.type == "code_generation":
@@ -947,7 +948,7 @@ class BPAgent:
                             if type(message) is str and not is_base64_image(message):
                                 message = replace_escaped_newlines(message)
                             collected_messages.append(message)
-                            yield message, not proc_step.suppress_output
+                            yield message, not proc_step.output_to_canvas
                 except AttributeError as ae:
                     async for chunk in generate_stream(
                         f"{ae}. Please check if the file exists."
@@ -988,7 +989,7 @@ class BPAgent:
                                 in image_models
                             ):
                                 yield step_output.text
-                        elif proc_step.type == "python_code":
+                        elif proc_step.type == "python_code" and not proc_step.output_to_canvas:
                             yield step_output.text
 
             elif type(proc_step) is list:

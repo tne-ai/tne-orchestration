@@ -568,7 +568,7 @@ def __construct_step_dict(
             "input": step_input,
             "description": node.get("data").get("title"),
             "output_type": node.get("data").get("outputType"),
-            "suppress_output": node.get("data").get("outputToCanvas"),
+            "output_to_canvas": node.get("data").get("outputToCanvas"),
             "data_sources": data_sources,
         }
         if output_files:
@@ -583,7 +583,7 @@ def __construct_step_dict(
             "type": "llm",
             "description": node.get("data").get("title"),
             "output_type": node.get("data").get("outputType"),
-            "suppress_output": node.get("data").get("outputToCanvas"),
+            "output_to_canvas": node.get("data").get("outputToCanvas"),
             "tool_json": node.get("data").get("toolJson"),
             "tool_code": node.get("data").get("toolCode"),
             "use_user_query": node.get("data").get("useUserQuery"),
@@ -612,7 +612,7 @@ def __construct_step_dict(
                 "name": "dispatched",
                 "type": "llm",
                 "output_type": "overwrite",
-                "suppress_output": node.get("data").get(
+                "output_to_canvas": node.get("data").get(
                     "outputToCanvas"
                 ),  # Inherit outputToCanvas from parent
                 "description": "Conditional logic to determine next step based on difficulty classification.",
@@ -632,7 +632,7 @@ def __construct_step_dict(
             "description": node.get("data").get("title"),
             "data_sources": data_sources,
             "output_type": node.get("data").get("outputType"),
-            "suppress_output": node.get("data").get("outputToCanvas"),
+            "output_to_canvas": node.get("data").get("outputToCanvas"),
             "input": step_input,
         }
 
@@ -649,7 +649,7 @@ def __construct_step_dict(
             "description": node.get("data").get("title"),
             "prompt": node.get("data").get("prompt"),
             "output_type": node.get("data").get("outputType"),
-            "suppress_output": node.get("data").get("outputToCanvas"),
+            "output_to_canvas": node.get("data").get("outputToCanvas"),
             "data_sources": data_sources,
             "input": step_input,
             "api_key": node.get("data").get("apiKey"),
@@ -670,7 +670,7 @@ def __construct_step_dict(
             "type": "rag",
             "description": node.get("data").get("title"),
             "output_type": node.get("data").get("outputType"),
-            "suppress_output": node.get("data").get("outputToCanvas"),
+            "output_to_canvas": node.get("data").get("outputToCanvas"),
             "show_debug": node.get("data").get("showDebug"),
             "rag_db_name": node.get("data").get("ragDbName"),
             "data_sources": data_sources,
@@ -687,7 +687,7 @@ def __construct_step_dict(
             "type": "semantic",
             "description": node.get("data").get("title"),
             "output_type": node.get("data").get("outputType"),
-            "suppress_output": node.get("data").get("outputToCanvas"),
+            "output_to_canvas": node.get("data").get("outputToCanvas"),
             "show_debug": node.get("data").get("showDebug"),
             "rag_db_name": node.get("data").get("ragDbName"),
             "data_sources": data_sources,
