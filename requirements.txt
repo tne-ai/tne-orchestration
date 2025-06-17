@@ -17,7 +17,7 @@ openai==1.4.0
 pandas
 plotly==5.17.0
 prompt-toolkit==3.0.39
-protobuf==5.28.3
+protobuf==5.29.5
 pydantic
 PyYAML
 ray
